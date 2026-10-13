@@ -233,6 +233,7 @@ jobs:
         env:
           JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
         run: |
+          set -o pipefail
           export PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH
           # Increase Gradle JVM memory for CI builds
           sed -i "s/org.gradle.jvmargs=-Xmx1024M/org.gradle.jvmargs=-Xmx2g/g" ./flutter/android/gradle.properties
@@ -245,7 +246,7 @@ jobs:
               cp ./target/${{ matrix.job.target }}/release/liblibrustdesk.so ./flutter/android/app/src/main/jniLibs/arm64-v8a/librustdesk.so
               # build flutter
               pushd flutter
-              flutter build apk "--${{ matrix.job.reltype }}" --target-platform android-arm64 --split-per-abi
+              flutter build apk "--${{ matrix.job.reltype }}" --target-platform android-arm64 --split-per-abi 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
               mv build/app/outputs/flutter-apk/app-arm64-v8a-${{ matrix.job.reltype }}.apk ../rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}${{ matrix.job.suffix }}.apk
             ;;
             armv7-linux-androideabi)
@@ -326,3 +327,20 @@ jobs:
           gh release upload apk-latest RustDesk-lx-arm64.apk -R "$GITHUB_REPOSITORY" --clobber
           gh release edit apk-latest -R "$GITHUB_REPOSITORY" \
             --notes "Bau #$GITHUB_RUN_NUMBER vom $(date -u '+%d.%m.%Y %H:%M') UTC, Commit ${GITHUB_SHA::7}."
+
+      # Bei einem Fehler das Ende des Bau-Protokolls als Release «build-log»
+      # ablegen, damit Claude die Ursache lesen kann.
+      - name: Fehlerprotokoll bereitstellen
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -f build.log ] || exit 0
+          tail -c 300000 build.log > build-log.txt
+          if ! gh release view build-log -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create build-log -R "$GITHUB_REPOSITORY" --prerelease \
+              --title "Letztes Fehlerprotokoll" --notes "Automatisch erstellt." \
+              --target "$GITHUB_SHA"
+          fi
+          gh release upload build-log build-log.txt -R "$GITHUB_REPOSITORY" --clobber
