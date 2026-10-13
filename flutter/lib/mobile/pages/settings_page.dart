@@ -21,6 +21,7 @@ import '../widgets/deploy_dialog.dart';
 import '../../models/shortcut_model.dart';
 import '../widgets/dialog.dart';
 import 'home_page.dart';
+import 'lx_settings_page.dart';
 import 'mobile_keyboard_shortcuts_page.dart';
 import 'scan_page.dart';
 
@@ -749,6 +750,25 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
               ),
             ],
           ),
+        if (!incomingOnly)
+          SettingsSection(title: const Text('Eigene Anpassungen'), tiles: [
+            SettingsTile.navigation(
+              leading: const Icon(Icons.tune),
+              title: const Text('Fernsteuerung anpassen'),
+              description: const Text(
+                  'Auto-Verbinden, Scrollen am Rand, Fusszeile'),
+              trailing: const Icon(Icons.arrow_forward_ios),
+              onPressed: (context) {
+                Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const LxSettingsPage(),
+                    )).then((_) {
+                  if (mounted) setState(() {});
+                });
+              },
+            ),
+          ]),
         SettingsSection(title: Text(translate("Settings")), tiles: [
           if (!disabledSettings && !_hideNetwork && !_hideServer)
             SettingsTile(

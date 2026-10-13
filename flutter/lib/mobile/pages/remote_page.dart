@@ -25,6 +25,8 @@ import '../../models/shortcut_model.dart';
 import '../../utils/image.dart';
 import '../widgets/dialog.dart';
 import '../widgets/custom_scale_widget.dart';
+import '../widgets/edge_scroll_strip.dart';
+import 'lx_settings_page.dart';
 
 final initText = '1' * 1024;
 
@@ -110,6 +112,23 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   final TextEditingController _textController =
       TextEditingController(text: initText);
+
+  // Eigene Anpassungen, einmal pro Verbindung gelesen.
+  final bool _lxEdgeScroll = LxPrefs.edgeScrollEnabled;
+  final bool _lxBarAlwaysVisible = LxPrefs.barAlwaysVisible;
+  final Set<String> _lxBarItems = LxPrefs.enabledBarItems;
+
+  // Werte werden hier frisch gelesen, weil der Aufrufer in einem
+  // OverlayEntry-Builder steckt, der nur beim ersten Build erzeugt wird.
+  bool _lxEdgeScrollActive() =>
+      _lxEdgeScroll &&
+      !(keyboardVisibilityController.isVisible && _showEdit) &&
+      !_showGestureHelp &&
+      !inputModel.isPhysicalMouse.value &&
+      gFFI.ffiModel.pi.isSet.isTrue &&
+      !gFFI.ffiModel.isPeerAndroid &&
+      !gFFI.ffiModel.viewOnly &&
+      gFFI.ffiModel.keyboard;
 
   _RemotePageState(String id) {
     initSharedStates(id);
@@ -521,6 +540,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                         _physicalFocusNode.requestFocus();
                       } else if (_showGestureHelp) {
                         _showGestureHelp = false;
+                      } else if (_lxBarAlwaysVisible) {
+                        _showBar = true;
                       } else {
                         _showBar = !_showBar;
                       }
@@ -563,12 +584,16 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                               }
                               return Container(
                                 color: MyTheme.canvasColor,
-                                child: inputModel.isPhysicalMouse.value
-                                    ? getBodyForMobile()
-                                    : RawTouchGestureDetectorRegion(
-                                        child: getBodyForMobile(),
-                                        ffi: gFFI,
-                                      ),
+                                child: EdgeScrollOverlay(
+                                  ffi: gFFI,
+                                  enabled: _lxEdgeScrollActive(),
+                                  child: inputModel.isPhysicalMouse.value
+                                      ? getBodyForMobile()
+                                      : RawTouchGestureDetectorRegion(
+                                          child: getBodyForMobile(),
+                                          ffi: gFFI,
+                                        ),
+                                ),
                               );
                             }),
                           ),
@@ -601,6 +626,73 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   Widget getBottomAppBar() {
     final ffiModel = Provider.of<FfiModel>(context);
+    // Eigene Anpassung: Welche Schaltflächen erscheinen, wird in
+    // Einstellungen > Fernsteuerung anpassen festgelegt.
+    bool show(String key) => _lxBarItems.contains(key);
+    final canInput =
+        !(isWebDesktop || ffiModel.viewOnly || !ffiModel.keyboard);
+    final buttons = <Widget>[
+      if (show(LxPrefs.barClose))
+        IconButton(
+          color: Colors.white,
+          icon: Icon(Icons.clear),
+          onPressed: () {
+            clientClose(sessionId, gFFI);
+          },
+        ),
+      if (show(LxPrefs.barDisplay))
+        IconButton(
+          color: Colors.white,
+          icon: Icon(Icons.tv),
+          onPressed: () {
+            setState(() => _showEdit = false);
+            showOptions(context, widget.id, gFFI.dialogManager);
+          },
+        ),
+      if (canInput && show(LxPrefs.barKeyboard))
+        IconButton(
+            color: Colors.white,
+            icon: Icon(Icons.keyboard),
+            onPressed: openKeyboard),
+      if (canInput && show(LxPrefs.barMode))
+        gFFI.ffiModel.isPeerAndroid
+            ? IconButton(
+                color: Colors.white,
+                icon: const Icon(Icons.build),
+                onPressed: () =>
+                    gFFI.dialogManager.toggleMobileActionsOverlay(ffi: gFFI),
+              )
+            : IconButton(
+                color: Colors.white,
+                icon: Icon(
+                    gFFI.ffiModel.touchMode ? Icons.touch_app : Icons.mouse),
+                onPressed: () =>
+                    setState(() => _showGestureHelp = !_showGestureHelp),
+              ),
+      if (!isWeb && show(LxPrefs.barChat))
+        futureBuilder(
+            future: gFFI.invokeMethod("get_value", "KEY_IS_SUPPORT_VOICE_CALL"),
+            hasData: (isSupportVoiceCall) => IconButton(
+                  color: Colors.white,
+                  icon: isAndroid && isSupportVoiceCall
+                      ? SvgPicture.asset('assets/chat.svg',
+                          colorFilter:
+                              ColorFilter.mode(Colors.white, BlendMode.srcIn))
+                      : Icon(Icons.message),
+                  onPressed: () => isAndroid && isSupportVoiceCall
+                      ? showChatOptions(widget.id)
+                      : onPressedTextChat(widget.id),
+                )),
+      if (show(LxPrefs.barMore))
+        IconButton(
+          color: Colors.white,
+          icon: Icon(Icons.more_vert),
+          onPressed: () {
+            setState(() => _showEdit = false);
+            showActions(widget.id);
+          },
+        ),
+    ];
     return BottomAppBar(
       elevation: 10,
       color: MyTheme.accent,
@@ -608,91 +700,22 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         mainAxisSize: MainAxisSize.max,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: <Widget>[
-          Row(
-              children: <Widget>[
-                    IconButton(
-                      color: Colors.white,
-                      icon: Icon(Icons.clear),
-                      onPressed: () {
-                        clientClose(sessionId, gFFI);
-                      },
-                    ),
-                    IconButton(
-                      color: Colors.white,
-                      icon: Icon(Icons.tv),
-                      onPressed: () {
-                        setState(() => _showEdit = false);
-                        showOptions(context, widget.id, gFFI.dialogManager);
-                      },
-                    )
-                  ] +
-                  (isWebDesktop || ffiModel.viewOnly || !ffiModel.keyboard
-                      ? []
-                      : gFFI.ffiModel.isPeerAndroid
-                          ? [
-                              IconButton(
-                                  color: Colors.white,
-                                  icon: Icon(Icons.keyboard),
-                                  onPressed: openKeyboard),
-                              IconButton(
-                                color: Colors.white,
-                                icon: const Icon(Icons.build),
-                                onPressed: () => gFFI.dialogManager
-                                    .toggleMobileActionsOverlay(ffi: gFFI),
-                              )
-                            ]
-                          : [
-                              IconButton(
-                                  color: Colors.white,
-                                  icon: Icon(Icons.keyboard),
-                                  onPressed: openKeyboard),
-                              IconButton(
-                                color: Colors.white,
-                                icon: Icon(gFFI.ffiModel.touchMode
-                                    ? Icons.touch_app
-                                    : Icons.mouse),
-                                onPressed: () => setState(
-                                    () => _showGestureHelp = !_showGestureHelp),
-                              ),
-                            ]) +
-                  (isWeb
-                      ? []
-                      : <Widget>[
-                          futureBuilder(
-                              future: gFFI.invokeMethod(
-                                  "get_value", "KEY_IS_SUPPORT_VOICE_CALL"),
-                              hasData: (isSupportVoiceCall) => IconButton(
-                                    color: Colors.white,
-                                    icon: isAndroid && isSupportVoiceCall
-                                        ? SvgPicture.asset('assets/chat.svg',
-                                            colorFilter: ColorFilter.mode(
-                                                Colors.white, BlendMode.srcIn))
-                                        : Icon(Icons.message),
-                                    onPressed: () =>
-                                        isAndroid && isSupportVoiceCall
-                                            ? showChatOptions(widget.id)
-                                            : onPressedTextChat(widget.id),
-                                  ))
-                        ]) +
-                  [
-                    IconButton(
-                      color: Colors.white,
-                      icon: Icon(Icons.more_vert),
-                      onPressed: () {
-                        setState(() => _showEdit = false);
-                        showActions(widget.id);
-                      },
-                    ),
-                  ]),
-          Obx(() => IconButton(
-                color: Colors.white,
-                icon: Icon(Icons.expand_more),
-                onPressed: gFFI.ffiModel.waitForFirstImage.isTrue
-                    ? null
-                    : () {
-                        setState(() => _showBar = !_showBar);
-                      },
-              )),
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(children: buttons),
+            ),
+          ),
+          if (!_lxBarAlwaysVisible)
+            Obx(() => IconButton(
+                  color: Colors.white,
+                  icon: Icon(Icons.expand_more),
+                  onPressed: gFFI.ffiModel.waitForFirstImage.isTrue
+                      ? null
+                      : () {
+                          setState(() => _showBar = !_showBar);
+                        },
+                )),
         ],
       ),
     );

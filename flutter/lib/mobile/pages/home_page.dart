@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/mobile/pages/server_page.dart';
 import 'package:flutter_hbb/mobile/pages/settings_page.dart';
 import 'package:flutter_hbb/web/settings_page.dart';
 import 'package:get/get.dart';
 import '../../common.dart';
-import '../../common/widgets/chat_page.dart';
 import '../../models/platform_model.dart';
 import '../../models/state_model.dart';
 import 'connection_page.dart';
+import 'lx_settings_page.dart';
 
 abstract class PageShape extends Widget {
   final String title = "";
@@ -43,6 +42,10 @@ class HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     initPages();
+    // Eigene Anpassung: beim App-Start direkt mit der gewählten Gegenstelle verbinden.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) LxPrefs.tryAutoConnect(context);
+    });
   }
 
   void initPages() {
@@ -52,10 +55,9 @@ class HomePageState extends State<HomePage> {
         appBarActions: [],
       ));
     }
-    if (isAndroid && !bind.isOutgoingOnly()) {
-      _chatPageTabIndex = _pages.length;
-      _pages.addAll([ChatPage(type: ChatPageType.mobileMain), ServerPage()]);
-    }
+    // Eigene Anpassung: Die Reiter "Chat" und "Bildschirm freigeben" sind entfernt.
+    // Diese Version dient nur zum Steuern anderer Geräte.
+    _chatPageTabIndex = -1;
     _pages.add(SettingsPage());
   }
 
