@@ -48,6 +48,8 @@ jobs:
 
   build-rustdesk-android:
     needs: [generate-bridge]
+    permissions:
+      contents: write
     name: build rustdesk android apk ${{ matrix.job.target }}
     runs-on: ${{ matrix.job.os }}
     strategy:
@@ -305,3 +307,22 @@ jobs:
         with:
           name: rustdesk-eigene-version-arm64
           path: ${{ steps.sign-rustdesk.outputs.signedReleaseFile || format('signed-apk/rustdesk-{0}-aarch64.apk', env.VERSION) }}
+
+      # Fertige APK zusätzlich als Release «apk-latest» ablegen: direkter
+      # Download (auch auf dem Handy, ohne ZIP) und für Claude abrufbar.
+      - name: APK als Release bereitstellen
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIGNED: ${{ steps.sign-rustdesk.outputs.signedReleaseFile }}
+        run: |
+          set -e
+          cp "$SIGNED" RustDesk-lx-arm64.apk
+          if ! gh release view apk-latest -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create apk-latest -R "$GITHUB_REPOSITORY" --prerelease \
+              --title "RustDesk lx (neuester Bau)" --notes "Automatisch erstellt." \
+              --target "$GITHUB_SHA"
+          fi
+          gh release upload apk-latest RustDesk-lx-arm64.apk -R "$GITHUB_REPOSITORY" --clobber
+          gh release edit apk-latest -R "$GITHUB_REPOSITORY" \
+            --notes "Bau #$GITHUB_RUN_NUMBER vom $(date -u '+%d.%m.%Y %H:%M') UTC, Commit ${GITHUB_SHA::7}."
