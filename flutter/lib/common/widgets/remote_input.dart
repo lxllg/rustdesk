@@ -12,6 +12,7 @@ import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/input_model.dart';
 
 import './gestures.dart';
+import '../../mobile/widgets/lx_tweaks.dart' show LxTouch;
 
 class RawKeyFocusScope extends StatelessWidget {
   final FocusNode? focusNode;
@@ -163,6 +164,7 @@ class _RawTouchGestureDetectorRegionState
       return;
     }
     if (handleTouch) {
+      if (await LxTouch.handle(ffi, 'tap', d.localPosition)) return;
       final isMoved =
           await ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
       if (isMoved) {
@@ -225,6 +227,9 @@ class _RawTouchGestureDetectorRegionState
         return;
       }
     }
+    if (await LxTouch.handle(ffi, 'doubleTap', _lastPosOfDoubleTapDown)) {
+      return;
+    }
     await inputModel.tap(MouseButtons.left);
     await inputModel.tap(MouseButtons.left);
   }
@@ -267,6 +272,9 @@ class _RawTouchGestureDetectorRegionState
     }
     if (!ffi.ffiModel.isPeerMobile) {
       if (handleTouch) {
+        if (await LxTouch.handle(ffi, 'longPress', _cacheLongPressPosition)) {
+          return;
+        }
         final isMoved = await ffi.cursorModel
             .move(_cacheLongPressPosition.dx, _cacheLongPressPosition.dy);
         if (!isMoved) {
@@ -286,6 +294,12 @@ class _RawTouchGestureDetectorRegionState
   }
 
   onLongPressMoveUpdate(LongPressMoveUpdateDetails d) async {
+    if (!ffiModel.isPeerMobile &&
+        !isNotTouchBasedDevice() &&
+        LxTouch.followsFingerOnLongPress(ffi)) {
+      await ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
+      return;
+    }
     if (!ffiModel.isPeerMobile || isNotTouchBasedDevice()) {
       return;
     }
@@ -312,6 +326,9 @@ class _RawTouchGestureDetectorRegionState
       return;
     }
 
+    if (await LxTouch.handle(ffi, 'twoFingerTap', _doubleFinerTapPosition)) {
+      return;
+    }
     // mobile mouse mode or desktop touch screen
     final isMobileMouseMode = isMobile && !ffiModel.touchMode;
     // We can't use `d.localPosition` here because it's always (0, 0) on desktop.

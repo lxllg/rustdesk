@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:settings_ui/settings_ui.dart';
 
@@ -16,9 +18,16 @@ class LxPrefs {
   static const _kBarAlwaysVisible = 'lx-bar-always-visible';
   static const _kBarItems = 'lx-bar-items';
 
-  static String _get(String key) => bind.mainGetLocalOption(key: key);
-  static Future<void> _set(String key, String value) =>
-      bind.mainSetLocalOption(key: key, value: value);
+  // Zwischenspeicher: manche Werte werden bei jeder Geste/Bewegung gelesen.
+  // Nur dieser Code schreibt die lx-Optionen, darum bleibt er aktuell.
+  static final Map<String, String> _cache = {};
+
+  static String _get(String key) =>
+      _cache[key] ??= bind.mainGetLocalOption(key: key);
+  static Future<void> _set(String key, String value) {
+    _cache[key] = value;
+    return bind.mainSetLocalOption(key: key, value: value);
+  }
 
   // ---------- Auto-Verbinden ----------
 
@@ -100,6 +109,7 @@ class LxPrefs {
   static const barDisplay = 'display';
   static const barKeyboard = 'keyboard';
   static const barMode = 'mode';
+  static const barLock = 'lock';
   static const barChat = 'chat';
   static const barMore = 'more';
 
@@ -109,6 +119,7 @@ class LxPrefs {
     barDisplay,
     barKeyboard,
     barMode,
+    barLock,
     barChat,
     barMore,
   ];
@@ -118,6 +129,7 @@ class LxPrefs {
     barDisplay: 'Anzeige-Optionen',
     barKeyboard: 'Tastatur',
     barMode: 'Maus-/Touch-Modus (bei Android-Geräten: Werkzeuge)',
+    barLock: 'Nach Sitzungsende sperren (Ein/Aus)',
     barChat: 'Chat / Sprachanruf',
     barMore: 'Weitere Aktionen',
   };
@@ -127,23 +139,36 @@ class LxPrefs {
     barDisplay: Icons.tv,
     barKeyboard: Icons.keyboard,
     barMode: Icons.touch_app,
+    barLock: Icons.lock_outline,
     barChat: Icons.message,
     barMore: Icons.more_vert,
   };
 
   static const _kNone = '-';
+  // Der Sperr-Knopf kam später dazu und hat einen eigenen Schalter,
+  // damit er auch bei bereits angepasster Fusszeile standardmässig erscheint.
+  static const _kBarLock = 'lx-bar-lock';
 
   static Set<String> get enabledBarItems {
     final raw = _get(_kBarItems).trim();
-    if (raw.isEmpty) return barItems.toSet();
-    if (raw == _kNone) return <String>{};
-    return raw.split(',').where(barItems.contains).toSet();
+    final Set<String> items;
+    if (raw.isEmpty) {
+      items = barItems.where((k) => k != barLock).toSet();
+    } else if (raw == _kNone) {
+      items = <String>{};
+    } else {
+      items = raw.split(',').where(barItems.contains).toSet();
+    }
+    items.remove(barLock);
+    if (_get(_kBarLock) != 'N') items.add(barLock);
+    return items;
   }
 
   static bool isBarItemEnabled(String key) => enabledBarItems.contains(key);
 
   static Future<void> setBarItemEnabled(String key, bool enabled) {
-    final items = enabledBarItems;
+    if (key == barLock) return _set(_kBarLock, enabled ? 'Y' : 'N');
+    final items = enabledBarItems..remove(barLock);
     if (enabled) {
       items.add(key);
     } else {
@@ -152,6 +177,195 @@ class LxPrefs {
     final ordered = barItems.where(items.contains).toList();
     return _set(_kBarItems, ordered.isEmpty ? _kNone : ordered.join(','));
   }
+
+  // ---------- Android-Navigationsleiste ----------
+
+  static const _kShowSystemNav = 'lx-show-system-nav';
+  static bool get showSystemNav => _get(_kShowSystemNav) == 'Y';
+  static Future<void> setShowSystemNav(bool v) =>
+      _set(_kShowSystemNav, v ? 'Y' : 'N');
+
+  // ---------- Zoom begrenzen ----------
+
+  static const _kLimitZoom = 'lx-limit-zoom';
+  static bool get limitZoom => _get(_kLimitZoom) != 'N';
+  static Future<void> setLimitZoom(bool v) => _set(_kLimitZoom, v ? 'Y' : 'N');
+
+  // ---------- Gesten im Touch-Modus ----------
+
+  static const gestureTap = 'tap';
+  static const gestureDoubleTap = 'doubleTap';
+  static const gestureLongPress = 'longPress';
+  static const gestureTwoFingerTap = 'twoFingerTap';
+
+  static const gestures = <String>[
+    gestureTap,
+    gestureDoubleTap,
+    gestureLongPress,
+    gestureTwoFingerTap,
+  ];
+
+  static const gestureLabels = <String, String>{
+    gestureTap: 'Tippen (1 Finger)',
+    gestureDoubleTap: 'Doppeltippen (1 Finger)',
+    gestureLongPress: 'Lange drücken (1 Finger)',
+    gestureTwoFingerTap: 'Tippen mit 2 Fingern',
+  };
+
+  /// Standard = Verhalten von RustDesk.
+  static const gestureDefaults = <String, String>{
+    gestureTap: actionLeft,
+    gestureDoubleTap: actionDouble,
+    gestureLongPress: actionRight,
+    gestureTwoFingerTap: actionNone,
+  };
+
+  static const actionLeft = 'left';
+  static const actionRight = 'right';
+  static const actionDouble = 'double';
+  static const actionMiddle = 'middle';
+  static const actionMove = 'move';
+  static const actionNone = 'none';
+
+  static const actionLabels = <String, String>{
+    actionLeft: 'Linksklick',
+    actionRight: 'Rechtsklick',
+    actionDouble: 'Doppelklick',
+    actionMiddle: 'Mittelklick',
+    actionMove: 'Nur Mauszeiger hierher bewegen',
+    actionNone: 'Nichts',
+  };
+
+  static String touchAction(String gesture) {
+    final v = _get('lx-gesture-$gesture');
+    return actionLabels.containsKey(v) ? v : gestureDefaults[gesture]!;
+  }
+
+  static Future<void> setTouchAction(String gesture, String action) =>
+      _set('lx-gesture-$gesture', action);
+
+  // ---------- Eigene Tastenkürzel ----------
+
+  static const _kShortcuts = 'lx-shortcuts';
+
+  static List<LxShortcut> get shortcuts {
+    final raw = _get(_kShortcuts).trim();
+    if (raw.isEmpty) return [];
+    try {
+      final list = jsonDecode(raw) as List;
+      return list
+          .whereType<Map>()
+          .map((e) => LxShortcut.fromJson(Map<String, dynamic>.from(e)))
+          .where((s) => s.isValid)
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static Future<void> setShortcuts(List<LxShortcut> list) =>
+      _set(_kShortcuts, jsonEncode(list.map((e) => e.toJson()).toList()));
+}
+
+/// Ein eigenes Tastenkürzel, z. B. Win+E oder Alt+F4.
+class LxShortcut {
+  final String label;
+  final bool ctrl;
+  final bool alt;
+  final bool shift;
+  final bool win;
+  final String key;
+
+  const LxShortcut({
+    required this.label,
+    required this.ctrl,
+    required this.alt,
+    required this.shift,
+    required this.win,
+    required this.key,
+  });
+
+  factory LxShortcut.fromJson(Map<String, dynamic> j) => LxShortcut(
+        label: (j['l'] ?? '').toString(),
+        ctrl: j['c'] == true,
+        alt: j['a'] == true,
+        shift: j['s'] == true,
+        win: j['w'] == true,
+        key: (j['k'] ?? '').toString(),
+      );
+
+  Map<String, dynamic> toJson() =>
+      {'l': label, 'c': ctrl, 'a': alt, 's': shift, 'w': win, 'k': key};
+
+  /// Anzeige der Tastenfolge, z. B. "Ctrl+Alt+Entf".
+  String get combo => [
+        if (ctrl) 'Ctrl',
+        if (alt) 'Alt',
+        if (shift) 'Shift',
+        if (win) 'Win',
+        if (key.isNotEmpty) key.toUpperCase(),
+      ].join('+');
+
+  String get displayLabel => label.trim().isNotEmpty ? label.trim() : combo;
+
+  /// RustDesk-Name der Taste, oder null wenn unbekannt.
+  /// Nur "Win" ohne weitere Taste öffnet das Startmenü.
+  String? get rustKey {
+    if (key.isEmpty) return (win && !ctrl && !alt && !shift) ? 'Meta' : null;
+    return keyToRust(key);
+  }
+
+  bool get isValid => rustKey != null;
+
+  static const _named = <String, String>{
+    'ESC': 'VK_ESCAPE',
+    'ESCAPE': 'VK_ESCAPE',
+    'TAB': 'VK_TAB',
+    'ENTER': 'VK_RETURN',
+    'EINGABE': 'VK_RETURN',
+    'SPACE': 'VK_SPACE',
+    'LEER': 'VK_SPACE',
+    'LEERTASTE': 'VK_SPACE',
+    'BACKSPACE': 'VK_BACK',
+    'RÜCK': 'VK_BACK',
+    'DEL': 'VK_DELETE',
+    'ENTF': 'VK_DELETE',
+    'DELETE': 'VK_DELETE',
+    'INS': 'VK_INSERT',
+    'EINFG': 'VK_INSERT',
+    'HOME': 'VK_HOME',
+    'POS1': 'VK_HOME',
+    'END': 'VK_END',
+    'ENDE': 'VK_END',
+    'PGUP': 'VK_PRIOR',
+    'BILDAUF': 'VK_PRIOR',
+    'PGDN': 'VK_NEXT',
+    'BILDAB': 'VK_NEXT',
+    'LEFT': 'VK_LEFT',
+    'LINKS': 'VK_LEFT',
+    'RIGHT': 'VK_RIGHT',
+    'RECHTS': 'VK_RIGHT',
+    'UP': 'VK_UP',
+    'HOCH': 'VK_UP',
+    'DOWN': 'VK_DOWN',
+    'RUNTER': 'VK_DOWN',
+    'PRTSCR': 'VK_SNAPSHOT',
+    'DRUCK': 'VK_SNAPSHOT',
+  };
+
+  static String? keyToRust(String raw) {
+    final k = raw.trim().toUpperCase().replaceAll(' ', '');
+    if (k.isEmpty) return null;
+    if (RegExp(r'^[A-Z0-9]$').hasMatch(k)) return 'VK_$k';
+    final f = RegExp(r'^F([1-9]|1[0-2])$').firstMatch(k);
+    if (f != null) return 'VK_$k';
+    return _named[k];
+  }
+
+  /// Lesbare Liste der erlaubten Tasten für die Hilfe im Dialog.
+  static const helpText = 'Buchstabe (A–Z), Ziffer (0–9), F1–F12, Esc, Tab, '
+      'Enter, Leer, Rück, Entf, Einfg, Pos1, Ende, BildAuf, BildAb, '
+      'Links, Rechts, Hoch, Runter, Druck. Nur «Win» ohne Taste öffnet das Startmenü.';
 }
 
 /// Einstellungsseite für die eigenen Anpassungen.
@@ -198,6 +412,7 @@ class _LxSettingsPageState extends State<LxSettingsPage> {
     final autoId = LxPrefs.autoConnectId;
     final edgeOn = LxPrefs.edgeScrollEnabled;
     final enabledItems = LxPrefs.enabledBarItems;
+    final shortcuts = LxPrefs.shortcuts;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Eigene Anpassungen')),
@@ -280,6 +495,18 @@ class _LxSettingsPageState extends State<LxSettingsPage> {
                   setState(() {});
                 },
               ),
+              SettingsTile.switchTile(
+                leading: const Icon(Icons.space_bar),
+                title: const Text('Android-Navigationsleiste anzeigen'),
+                description: const Text(
+                    'Lässt Zurück/Home/Übersicht von Android während der '
+                    'Verbindung sichtbar. Die Fusszeile liegt dann darüber.'),
+                initialValue: LxPrefs.showSystemNav,
+                onToggle: (v) async {
+                  await LxPrefs.setShowSystemNav(v);
+                  setState(() {});
+                },
+              ),
               for (final key in LxPrefs.barItems)
                 SettingsTile.switchTile(
                   leading: Icon(LxPrefs.barItemIcons[key]),
@@ -296,9 +523,176 @@ class _LxSettingsPageState extends State<LxSettingsPage> {
                 ),
             ],
           ),
+          SettingsSection(
+            title: const Text('Ansicht'),
+            tiles: [
+              SettingsTile.switchTile(
+                leading: const Icon(Icons.fit_screen),
+                title: const Text('Zoom auf Bildschirmbreite begrenzen'),
+                description: const Text(
+                    'Weiter herauszoomen geht nur, bis der PC-Bildschirm links '
+                    'und rechts anstösst. Kein Verschieben über den Rand hinaus.'),
+                initialValue: LxPrefs.limitZoom,
+                onToggle: (v) async {
+                  await LxPrefs.setLimitZoom(v);
+                  setState(() {});
+                },
+              ),
+            ],
+          ),
+          SettingsSection(
+            title: const Text('Gesten im Touch-Modus'),
+            tiles: [
+              for (final g in LxPrefs.gestures)
+                SettingsTile(
+                  leading: const Icon(Icons.gesture),
+                  title: Text(LxPrefs.gestureLabels[g]!),
+                  description: Text(
+                      LxPrefs.actionLabels[LxPrefs.touchAction(g)]! +
+                          (g == LxPrefs.gestureLongPress &&
+                                  LxPrefs.touchAction(g) == LxPrefs.actionMove
+                              ? ' (folgt dem Finger)'
+                              : '')),
+                  onPressed: (context) => _pickOption(
+                    title: LxPrefs.gestureLabels[g]!,
+                    options: LxPrefs.actionLabels,
+                    current: LxPrefs.touchAction(g),
+                    onSelected: (v) => LxPrefs.setTouchAction(g, v),
+                  ),
+                ),
+            ],
+          ),
+          SettingsSection(
+            title: const Text('Eigene Tastenkürzel (Tastatur-Leiste)'),
+            tiles: [
+              for (final s in shortcuts)
+                SettingsTile(
+                  leading: const Icon(Icons.keyboard_command_key),
+                  title: Text(s.displayLabel),
+                  description: Text(s.combo),
+                  trailing: const Icon(Icons.delete_outline),
+                  onPressed: (context) => _deleteShortcut(s),
+                ),
+              SettingsTile(
+                leading: const Icon(Icons.add),
+                title: const Text('Kürzel hinzufügen'),
+                description: const Text(
+                    'Erscheint als Knopf in der Leiste über der Tastatur, '
+                    'z. B. Win+E, Ctrl+A, Alt+F4.'),
+                onPressed: (context) => _addShortcut(),
+              ),
+            ],
+          ),
         ],
       ),
     );
+  }
+
+  Future<void> _deleteShortcut(LxShortcut s) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Kürzel löschen?'),
+        content: Text('${s.displayLabel} (${s.combo})'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(c).pop(false),
+              child: const Text('Abbrechen')),
+          TextButton(
+              onPressed: () => Navigator.of(c).pop(true),
+              child: const Text('Löschen')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final list = LxPrefs.shortcuts;
+    final i = list.indexWhere((e) =>
+        e.label == s.label && e.combo == s.combo);
+    if (i >= 0) list.removeAt(i);
+    await LxPrefs.setShortcuts(list);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _addShortcut() async {
+    final keyController = TextEditingController();
+    final labelController = TextEditingController();
+    var ctrl = false, alt = false, shift = false, win = false;
+    String? error;
+    final result = await showDialog<LxShortcut>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setDialogState) {
+          Widget chip(String text, bool value, ValueChanged<bool> onChanged) =>
+              FilterChip(
+                label: Text(text),
+                selected: value,
+                onSelected: (v) => setDialogState(() => onChanged(v)),
+              );
+          return AlertDialog(
+            title: const Text('Kürzel hinzufügen'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(spacing: 6, runSpacing: 6, children: [
+                    chip('Ctrl', ctrl, (v) => ctrl = v),
+                    chip('Alt', alt, (v) => alt = v),
+                    chip('Shift', shift, (v) => shift = v),
+                    chip('Win', win, (v) => win = v),
+                  ]),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: keyController,
+                    decoration: InputDecoration(
+                      labelText: 'Taste',
+                      hintText: 'z. B. E, F4, Tab',
+                      errorText: error,
+                    ),
+                  ),
+                  TextField(
+                    controller: labelController,
+                    decoration: const InputDecoration(
+                      labelText: 'Bezeichnung (optional)',
+                      hintText: 'z. B. Explorer',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(LxShortcut.helpText,
+                      style: const TextStyle(fontSize: 12)),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.of(c).pop(),
+                  child: const Text('Abbrechen')),
+              TextButton(
+                onPressed: () {
+                  final s = LxShortcut(
+                    label: labelController.text.trim(),
+                    ctrl: ctrl,
+                    alt: alt,
+                    shift: shift,
+                    win: win,
+                    key: keyController.text.trim(),
+                  );
+                  if (!s.isValid) {
+                    setDialogState(() => error = 'Diese Taste kenne ich nicht.');
+                    return;
+                  }
+                  Navigator.of(c).pop(s);
+                },
+                child: const Text('Hinzufügen'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    if (result == null) return;
+    await LxPrefs.setShortcuts([...LxPrefs.shortcuts, result]);
+    if (mounted) setState(() {});
   }
 
   Future<void> _pickOption({

@@ -27,6 +27,7 @@ import '../widgets/dialog.dart';
 import '../widgets/custom_scale_widget.dart';
 import '../widgets/edge_scroll_strip.dart';
 import 'lx_settings_page.dart';
+import '../widgets/lx_tweaks.dart';
 
 final initText = '1' * 1024;
 
@@ -117,6 +118,10 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   final bool _lxEdgeScroll = LxPrefs.edgeScrollEnabled;
   final bool _lxBarAlwaysVisible = LxPrefs.barAlwaysVisible;
   final Set<String> _lxBarItems = LxPrefs.enabledBarItems;
+  // Statt alle Systemleisten auszublenden, bleibt auf Wunsch die
+  // Android-Navigationsleiste sichtbar.
+  final List<SystemUiOverlay> _lxVisibleOverlays =
+      LxPrefs.showSystemNav ? [SystemUiOverlay.bottom] : [];
 
   // Werte werden hier frisch gelesen, weil der Aufrufer in einem
   // OverlayEntry-Builder steckt, der nur beim ersten Build erzeugt wird.
@@ -147,7 +152,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       forceRelay: widget.forceRelay,
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
+          overlays: _lxVisibleOverlays);
       gFFI.dialogManager
           .showLoading(translate('Connecting...'), onCancel: closeConnection);
     });
@@ -301,7 +307,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
 
   void onSoftKeyboardChanged(bool visible) {
     if (!visible) {
-      SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
+          overlays: _lxVisibleOverlays);
       // [pi.version.isNotEmpty] -> check ready or not, avoid login without soft-keyboard
       if (gFFI.chatModel.chatWindowOverlayEntry == null &&
           gFFI.ffiModel.pi.version.isNotEmpty) {
@@ -669,6 +676,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                 onPressed: () =>
                     setState(() => _showGestureHelp = !_showGestureHelp),
               ),
+      if (canInput && !gFFI.ffiModel.isPeerAndroid && show(LxPrefs.barLock))
+        _lxLockButton(),
       if (!isWeb && show(LxPrefs.barChat))
         futureBuilder(
             future: gFFI.invokeMethod("get_value", "KEY_IS_SUPPORT_VOICE_CALL"),
@@ -718,6 +727,38 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                 )),
         ],
       ),
+    );
+  }
+
+  // Eigene Anpassung: «Nach Sitzungsende sperren» direkt umschalten.
+  Widget _lxLockButton() {
+    const option = 'lock-after-session-end';
+    final on = bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
+    return IconButton(
+      color: Colors.white,
+      tooltip: 'Nach Sitzungsende sperren',
+      icon: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Icon(on ? Icons.lock : Icons.lock_open,
+              color: on ? Colors.white : Colors.white54),
+          if (on)
+            const Positioned(
+              right: -4,
+              bottom: -4,
+              child: Icon(Icons.check_circle, size: 13, color: Colors.white),
+            ),
+        ],
+      ),
+      onPressed: () async {
+        await bind.sessionToggleOption(sessionId: sessionId, value: option);
+        final now =
+            bind.sessionGetToggleOptionSync(sessionId: sessionId, arg: option);
+        showToast(now
+            ? 'Nach Sitzungsende sperren: Ein'
+            : 'Nach Sitzungsende sperren: Aus');
+        if (mounted) setState(() {});
+      },
     );
   }
 
@@ -1201,6 +1242,9 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
       wrap(isMac ? 'Cmd+S' : 'Ctrl+S', () {
         sendPrompt(isMac, 'VK_S');
       }),
+      // Eigene Anpassung: selbst angelegte Tastenkürzel.
+      for (final s in LxPrefs.shortcuts)
+        wrap(s.displayLabel, () => LxKeys.send(inputModel, s)),
     ];
     final space = size.width > 320 ? 4.0 : 2.0;
     // 500 ms is long enough for this widget to be built!

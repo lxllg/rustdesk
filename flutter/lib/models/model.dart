@@ -41,6 +41,7 @@ import 'package:vector_math/vector_math.dart' show Vector2;
 import '../common.dart';
 import '../utils/image.dart' as img;
 import '../common/widgets/dialog.dart';
+import '../mobile/widgets/lx_tweaks.dart' show LxView;
 import 'input_model.dart';
 import 'platform_model.dart';
 import 'package:flutter_hbb/utils/scale.dart';
@@ -2034,6 +2035,8 @@ class ImageModel with ChangeNotifier {
     final size = parent.target!.canvasModel.getSize();
     final xscale = size.width / _image!.width;
     final yscale = size.height / _image!.height;
+    final lxMin = LxView.minScale(size.width, _image!.width);
+    if (lxMin != null) return lxMin;
     return min(xscale, yscale) / 1.5;
   }
 
@@ -2448,6 +2451,9 @@ class CanvasModel with ChangeNotifier {
   }
 
   _resetCanvasOffset(int displayWidth, int displayHeight) {
+    if (isMobile) {
+      _scale = LxView.limitScale(_scale, size.width, displayWidth);
+    }
     _x = (size.width - displayWidth * _scale) / 2;
     _y = (size.height - displayHeight * _scale) / 2;
     if (isMobile) {
@@ -2711,6 +2717,7 @@ class CanvasModel with ChangeNotifier {
     _x += dx;
     if (isMobile) {
       isMobileCanvasChanged = true;
+      _x = LxView.clampOffset(_x, size.width, getDisplayWidth() * _scale);
     }
     notifyListeners();
   }
@@ -2728,6 +2735,9 @@ class CanvasModel with ChangeNotifier {
     _y += dy;
     if (isMobile) {
       isMobileCanvasChanged = true;
+      if (getAdjustY() == 0) {
+        _y = LxView.clampOffsetY(_y, size.height, getDisplayHeight() * _scale);
+      }
     }
     notifyListeners();
   }
@@ -2750,6 +2760,10 @@ class CanvasModel with ChangeNotifier {
     _y = focalPoint.dy - adjust - (focalPoint.dy - _y - adjust) / s * _scale;
     if (isMobile) {
       isMobileCanvasChanged = true;
+      _x = LxView.clampOffset(_x, size.width, getDisplayWidth() * _scale);
+      if (adjust == 0) {
+        _y = LxView.clampOffsetY(_y, size.height, getDisplayHeight() * _scale);
+      }
     }
     notifyListeners();
   }
