@@ -185,6 +185,12 @@ class LxPrefs {
   static Future<void> setShowSystemNav(bool v) =>
       _set(_kShowSystemNav, v ? 'Y' : 'N');
 
+  // ---------- Verbindung im Hintergrund halten ----------
+
+  static const _kKeepAlive = 'lx-keep-alive';
+  static bool get keepAlive => _get(_kKeepAlive) != 'N';
+  static Future<void> setKeepAlive(bool v) => _set(_kKeepAlive, v ? 'Y' : 'N');
+
   // ---------- Zoom begrenzen ----------
 
   static const _kLimitZoom = 'lx-limit-zoom';
@@ -521,6 +527,24 @@ class _LxSettingsPageState extends State<LxSettingsPage> {
                     setState(() {});
                   },
                 ),
+            ],
+          ),
+          SettingsSection(
+            title: const Text('Verbindung'),
+            tiles: [
+              SettingsTile.switchTile(
+                leading: const Icon(Icons.link),
+                title: const Text('Verbindung im Hintergrund halten'),
+                description: const Text(
+                    'Beim Wechsel in eine andere App bleibt die Verbindung '
+                    'bestehen. Solange verbunden ist, zeigt Android dazu eine '
+                    'Mitteilung an.'),
+                initialValue: LxPrefs.keepAlive,
+                onToggle: (v) async {
+                  await LxPrefs.setKeepAlive(v);
+                  setState(() {});
+                },
+              ),
             ],
           ),
           SettingsSection(

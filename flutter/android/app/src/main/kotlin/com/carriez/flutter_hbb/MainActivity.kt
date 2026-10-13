@@ -365,6 +365,14 @@ class MainActivity : FlutterActivity() {
                         result.success(true)
                     }
                 }
+                "lx_session_keepalive" -> {
+                    if (call.arguments == true) {
+                        LxSessionService.start(this@MainActivity)
+                    } else {
+                        LxSessionService.stop(this@MainActivity)
+                    }
+                    result.success(true)
+                }
                 "enable_soft_keyboard" -> {
                     // https://blog.csdn.net/hanye2020/article/details/105553780
                     if (call.arguments as Boolean) {
