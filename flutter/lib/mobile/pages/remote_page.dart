@@ -831,6 +831,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       : child;
 
   // Eigene Anpassung: PC-Bildschirm schwärzen (Privatsphäre-Modus).
+  static bool _lxPrivacyHintShown = false;
+
   // Gibt den Grund zurück, warum es nicht geht, oder null.
   String? _lxPrivacyProblem() {
     final ffiModel = gFFI.ffiModel;
@@ -856,7 +858,11 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     if (state.isNotEmpty == on) return;
     final problem = on ? _lxPrivacyProblem() : null;
     if (problem != null) {
-      showToast(problem, timeout: const Duration(seconds: 8));
+      // Beim automatischen Schwärzen den Grund nur einmal pro App-Start zeigen.
+      if (!quiet || !_lxPrivacyHintShown) {
+        _lxPrivacyHintShown = true;
+        showToast(problem, timeout: const Duration(seconds: 8));
+      }
       return;
     }
     final impls = pi.platformAdditions[kPlatformAdditionsSupportedPrivacyModeImpl]
