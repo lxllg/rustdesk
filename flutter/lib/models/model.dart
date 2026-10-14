@@ -3149,7 +3149,9 @@ class CursorModel with ChangeNotifier {
   bool get lastKeyboardIsVisible => _lastKeyboardIsVisible;
 
   Rect? get keyHelpToolsRectToAdjustCanvas =>
-      _lastKeyboardIsVisible ? _keyHelpToolsRect : null;
+      _lastKeyboardIsVisible && !LxView.keyboardOverlay
+          ? _keyHelpToolsRect
+          : null;
   // The blocked rect is used to block the pointer/touch events in the remote page.
   final List<Rect> _blockedRects = [];
   // Used in shouldBlock().
@@ -3176,7 +3178,9 @@ class CursorModel with ChangeNotifier {
       // `lastIsBlocked` will be set when the cursor is moving or touch somewhere else.
       _lastIsBlocked = true;
     }
-    if (isMobile && _lastKeyboardIsVisible != keyboardIsVisible) {
+    if (isMobile &&
+        _lastKeyboardIsVisible != keyboardIsVisible &&
+        !LxView.keyboardOverlay) {
       if (keyboardIsVisible) {
         parent.target?.canvasModel.saveMobileOffsetBeforeSoftKeyboard();
         parent.target?.canvasModel.mobileFocusCanvasCursor();

@@ -110,6 +110,7 @@ class LxPrefs {
   static const barKeyboard = 'keyboard';
   static const barMode = 'mode';
   static const barLock = 'lock';
+  static const barPrivacy = 'privacy';
   static const barChat = 'chat';
   static const barMore = 'more';
 
@@ -120,6 +121,7 @@ class LxPrefs {
     barKeyboard,
     barMode,
     barLock,
+    barPrivacy,
     barChat,
     barMore,
   ];
@@ -130,6 +132,7 @@ class LxPrefs {
     barKeyboard: 'Tastatur',
     barMode: 'Maus-/Touch-Modus (bei Android-Geräten: Werkzeuge)',
     barLock: 'Nach Sitzungsende sperren (Ein/Aus)',
+    barPrivacy: 'PC-Bildschirm schwärzen (Ein/Aus)',
     barChat: 'Chat / Sprachanruf',
     barMore: 'Weitere Aktionen',
   };
@@ -140,35 +143,42 @@ class LxPrefs {
     barKeyboard: Icons.keyboard,
     barMode: Icons.touch_app,
     barLock: Icons.lock_outline,
+    barPrivacy: Icons.desktop_access_disabled,
     barChat: Icons.message,
     barMore: Icons.more_vert,
   };
 
   static const _kNone = '-';
-  // Der Sperr-Knopf kam später dazu und hat einen eigenen Schalter,
-  // damit er auch bei bereits angepasster Fusszeile standardmässig erscheint.
-  static const _kBarLock = 'lx-bar-lock';
+  // Später hinzugekommene Knöpfe haben je einen eigenen Schalter,
+  // damit sie auch bei bereits angepasster Fusszeile standardmässig erscheinen.
+  static const _lateBarItems = <String, String>{
+    barLock: 'lx-bar-lock',
+    barPrivacy: 'lx-bar-privacy',
+  };
 
   static Set<String> get enabledBarItems {
     final raw = _get(_kBarItems).trim();
     final Set<String> items;
     if (raw.isEmpty) {
-      items = barItems.where((k) => k != barLock).toSet();
+      items = barItems.toSet();
     } else if (raw == _kNone) {
       items = <String>{};
     } else {
       items = raw.split(',').where(barItems.contains).toSet();
     }
-    items.remove(barLock);
-    if (_get(_kBarLock) != 'N') items.add(barLock);
+    for (final e in _lateBarItems.entries) {
+      items.remove(e.key);
+      if (_get(e.value) != 'N') items.add(e.key);
+    }
     return items;
   }
 
   static bool isBarItemEnabled(String key) => enabledBarItems.contains(key);
 
   static Future<void> setBarItemEnabled(String key, bool enabled) {
-    if (key == barLock) return _set(_kBarLock, enabled ? 'Y' : 'N');
-    final items = enabledBarItems..remove(barLock);
+    final lateKey = _lateBarItems[key];
+    if (lateKey != null) return _set(lateKey, enabled ? 'Y' : 'N');
+    final items = enabledBarItems..removeAll(_lateBarItems.keys);
     if (enabled) {
       items.add(key);
     } else {
@@ -190,6 +200,86 @@ class LxPrefs {
   static const _kKeepAlive = 'lx-keep-alive';
   static bool get keepAlive => _get(_kKeepAlive) != 'N';
   static Future<void> setKeepAlive(bool v) => _set(_kKeepAlive, v ? 'Y' : 'N');
+
+  // ---------- PC-Bildschirm schwärzen ----------
+
+  static const _kAutoPrivacy = 'lx-auto-privacy';
+  static bool get autoPrivacy => _get(_kAutoPrivacy) == 'Y';
+  static Future<void> setAutoPrivacy(bool v) =>
+      _set(_kAutoPrivacy, v ? 'Y' : 'N');
+
+  // ---------- Tastatur ----------
+
+  /// Bildschirmtastatur verdeckt nur den unteren Teil, das Bild bleibt stehen.
+  static const _kKeyboardOverlay = 'lx-keyboard-overlay';
+  static bool get keyboardOverlay => _get(_kKeyboardOverlay) != 'N';
+  static Future<void> setKeyboardOverlay(bool v) =>
+      _set(_kKeyboardOverlay, v ? 'Y' : 'N');
+
+  /// Vorhandene Tasten der Leiste über der Tastatur, die sich ausblenden lassen.
+  static const builtinKeys = <String>[
+    'Ctrl', 'Alt', 'Shift', 'Win', 'Fn', 'Esc', 'Tab', 'Home', 'End', 'Ins',
+    'Del', 'PgUp', 'PgDn', 'PrtScr', 'ScrollLock', 'Pause', 'Menu', 'Enter',
+    'arrows', 'Ctrl+C', 'Ctrl+V', 'Ctrl+S',
+  ];
+
+  static const builtinKeyLabels = <String, String>{
+    'Fn': 'Fn (F1–F12)',
+    'Home': 'Home (Pos1)',
+    'End': 'End (Ende)',
+    'Ins': 'Ins (Einfg)',
+    'Del': 'Del (Entf)',
+    'PgUp': 'PgUp (Bild auf)',
+    'PgDn': 'PgDn (Bild ab)',
+    'PrtScr': 'PrtScr (Druck)',
+    'Menu': 'Menu (Kontextmenü)',
+    'arrows': 'Pfeiltasten',
+  };
+
+  static const _kHiddenKeys = 'lx-hidden-keys';
+
+  static Set<String> get hiddenKeys {
+    final raw = _get(_kHiddenKeys).trim();
+    if (raw.isEmpty) return <String>{};
+    return raw.split(',').where(builtinKeys.contains).toSet();
+  }
+
+  static Future<void> setKeyVisible(String key, bool visible) {
+    final hidden = hiddenKeys;
+    if (visible) {
+      hidden.remove(key);
+    } else {
+      hidden.add(key);
+    }
+    return _set(_kHiddenKeys, builtinKeys.where(hidden.contains).join(','));
+  }
+
+  /// [text] = Beschriftung in der Leiste (z. B. ' Alt ', 'Cmd+C'),
+  /// [arrow] = true für die Pfeiltasten.
+  static bool isBuiltinKeyHidden(String text, {bool arrow = false}) {
+    final hidden = hiddenKeys;
+    if (hidden.isEmpty) return false;
+    if (arrow) return hidden.contains('arrows');
+    var id = text.trim().replaceAll('Cmd', text.contains('+') ? 'Ctrl' : 'Win');
+    return hidden.contains(id);
+  }
+
+  // ---------- Wischen mit 1 Finger ----------
+
+  static const panCanvas = 'canvas';
+  static const panDrag = 'drag';
+  static const panLabels = <String, String>{
+    panCanvas: 'Bild verschieben',
+    panDrag: 'Maus ziehen / markieren (wie RustDesk)',
+  };
+  static const _kOneFingerPan = 'lx-one-finger-pan';
+  static String get oneFingerPan =>
+      _get(_kOneFingerPan) == panDrag ? panDrag : panCanvas;
+  static Future<void> setOneFingerPan(String v) => _set(_kOneFingerPan, v);
+
+  static const _kPanInvert = 'lx-pan-invert';
+  static bool get panInvert => _get(_kPanInvert) == 'Y';
+  static Future<void> setPanInvert(bool v) => _set(_kPanInvert, v ? 'Y' : 'N');
 
   // ---------- Zoom begrenzen ----------
 
@@ -218,12 +308,20 @@ class LxPrefs {
     gestureTwoFingerTap: 'Tippen mit 2 Fingern',
   };
 
-  /// Standard = Verhalten von RustDesk.
-  static const gestureDefaults = <String, String>{
+  /// Verhalten von RustDesk – bei dieser Wahl läuft der Original-Code.
+  static const gestureRustdesk = <String, String>{
     gestureTap: actionLeft,
     gestureDoubleTap: actionDouble,
     gestureLongPress: actionRight,
     gestureTwoFingerTap: actionNone,
+  };
+
+  /// Voreinstellung dieser Version.
+  static const gestureDefaults = <String, String>{
+    gestureTap: actionLeft,
+    gestureDoubleTap: actionDouble,
+    gestureLongPress: actionDrag,
+    gestureTwoFingerTap: actionRight,
   };
 
   static const actionLeft = 'left';
@@ -231,6 +329,7 @@ class LxPrefs {
   static const actionDouble = 'double';
   static const actionMiddle = 'middle';
   static const actionMove = 'move';
+  static const actionDrag = 'drag';
   static const actionNone = 'none';
 
   static const actionLabels = <String, String>{
@@ -239,6 +338,7 @@ class LxPrefs {
     actionDouble: 'Doppelklick',
     actionMiddle: 'Mittelklick',
     actionMove: 'Nur Mauszeiger hierher bewegen',
+    actionDrag: 'Klicken & ziehen (Maustaste halten)',
     actionNone: 'Nichts',
   };
 
@@ -271,6 +371,14 @@ class LxPrefs {
 
   static Future<void> setShortcuts(List<LxShortcut> list) =>
       _set(_kShortcuts, jsonEncode(list.map((e) => e.toJson()).toList()));
+}
+
+/// Platzhalter für ausgeblendete Tasten; wird vor dem Anzeigen herausgefiltert.
+class LxHiddenKey extends StatelessWidget {
+  const LxHiddenKey({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }
 
 /// Ein eigenes Tastenkürzel, z. B. Win+E oder Alt+F4.
@@ -419,6 +527,7 @@ class _LxSettingsPageState extends State<LxSettingsPage> {
     final edgeOn = LxPrefs.edgeScrollEnabled;
     final enabledItems = LxPrefs.enabledBarItems;
     final shortcuts = LxPrefs.shortcuts;
+    final hiddenKeys = LxPrefs.hiddenKeys;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Eigene Anpassungen')),
@@ -545,6 +654,19 @@ class _LxSettingsPageState extends State<LxSettingsPage> {
                   setState(() {});
                 },
               ),
+              SettingsTile.switchTile(
+                leading: const Icon(Icons.desktop_access_disabled),
+                title: const Text('PC-Bildschirm automatisch schwärzen'),
+                description: const Text(
+                    'Schaltet beim Verbinden den Privatsphäre-Modus ein: Am PC '
+                    'sieht man nur Schwarz, du siehst weiterhin alles. Nach dem '
+                    'Trennen ist der PC-Bildschirm wieder normal.'),
+                initialValue: LxPrefs.autoPrivacy,
+                onToggle: (v) async {
+                  await LxPrefs.setAutoPrivacy(v);
+                  setState(() {});
+                },
+              ),
             ],
           ),
           SettingsSection(
@@ -567,6 +689,31 @@ class _LxSettingsPageState extends State<LxSettingsPage> {
           SettingsSection(
             title: const Text('Gesten im Touch-Modus'),
             tiles: [
+              SettingsTile(
+                leading: const Icon(Icons.swipe),
+                title: const Text('Wischen mit 1 Finger'),
+                description:
+                    Text(LxPrefs.panLabels[LxPrefs.oneFingerPan]!),
+                onPressed: (context) => _pickOption(
+                  title: 'Wischen mit 1 Finger',
+                  options: LxPrefs.panLabels,
+                  current: LxPrefs.oneFingerPan,
+                  onSelected: LxPrefs.setOneFingerPan,
+                ),
+              ),
+              if (LxPrefs.oneFingerPan == LxPrefs.panCanvas)
+                SettingsTile.switchTile(
+                  leading: const Icon(Icons.flip),
+                  title: const Text('Verschieben umkehren'),
+                  description: const Text(
+                      'Aus: Bild folgt dem Finger. Ein: Ansicht bewegt sich in '
+                      'Fingerrichtung.'),
+                  initialValue: LxPrefs.panInvert,
+                  onToggle: (v) async {
+                    await LxPrefs.setPanInvert(v);
+                    setState(() {});
+                  },
+                ),
               for (final g in LxPrefs.gestures)
                 SettingsTile(
                   leading: const Icon(Icons.gesture),
@@ -576,6 +723,10 @@ class _LxSettingsPageState extends State<LxSettingsPage> {
                           (g == LxPrefs.gestureLongPress &&
                                   LxPrefs.touchAction(g) == LxPrefs.actionMove
                               ? ' (folgt dem Finger)'
+                              : '') +
+                          (g == LxPrefs.gestureLongPress &&
+                                  LxPrefs.touchAction(g) == LxPrefs.actionDrag
+                              ? ' – loslassen ohne Bewegen = Klick'
                               : '')),
                   onPressed: (context) => _pickOption(
                     title: LxPrefs.gestureLabels[g]!,
@@ -583,6 +734,38 @@ class _LxSettingsPageState extends State<LxSettingsPage> {
                     current: LxPrefs.touchAction(g),
                     onSelected: (v) => LxPrefs.setTouchAction(g, v),
                   ),
+                ),
+            ],
+          ),
+          SettingsSection(
+            title: const Text('Tastatur'),
+            tiles: [
+              SettingsTile.switchTile(
+                leading: const Icon(Icons.keyboard_hide),
+                title: const Text('Bild beim Öffnen der Tastatur nicht verschieben'),
+                description: const Text(
+                    'Die Tastatur verdeckt nur den unteren Teil, oben bleibt '
+                    'alles wie vorher. Die Tastenleiste sitzt direkt über der '
+                    'Tastatur.'),
+                initialValue: LxPrefs.keyboardOverlay,
+                onToggle: (v) async {
+                  await LxPrefs.setKeyboardOverlay(v);
+                  setState(() {});
+                },
+              ),
+            ],
+          ),
+          SettingsSection(
+            title: const Text('Vorhandene Tasten in der Tastatur-Leiste'),
+            tiles: [
+              for (final k in LxPrefs.builtinKeys)
+                SettingsTile.switchTile(
+                  title: Text(LxPrefs.builtinKeyLabels[k] ?? k),
+                  initialValue: !hiddenKeys.contains(k),
+                  onToggle: (v) async {
+                    await LxPrefs.setKeyVisible(k, v);
+                    setState(() {});
+                  },
                 ),
             ],
           ),

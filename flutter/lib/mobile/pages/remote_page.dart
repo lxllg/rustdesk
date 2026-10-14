@@ -189,6 +189,11 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         // log a no-handler debug line if a user binds one.
         registerSessionShortcutActions(gFFI);
         _registerMobileChatShortcut();
+        if (LxPrefs.autoPrivacy) {
+          Future.delayed(const Duration(milliseconds: 800), () {
+            if (mounted && _lxPrivacyAvailable) _lxSetPrivacy(true, quiet: true);
+          });
+        }
         registerToolbarShortcuts(context, widget.id, gFFI);
       }
     });
@@ -684,6 +689,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
               ),
       if (canInput && !gFFI.ffiModel.isPeerAndroid && show(LxPrefs.barLock))
         _lxLockButton(),
+      if (canInput && _lxPrivacyAvailable && show(LxPrefs.barPrivacy))
+        _lxPrivacyButton(),
       if (!isWeb && show(LxPrefs.barChat))
         futureBuilder(
             future: gFFI.invokeMethod("get_value", "KEY_IS_SUPPORT_VOICE_CALL"),
@@ -768,6 +775,59 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     );
   }
 
+  // Eigene Anpassung: Tastenleiste direkt über der Tastatur statt oben.
+  Widget _lxPlaceKeyHelp(Widget child) => LxView.keyboardOverlay
+      ? Positioned(left: 0, right: 0, bottom: 0, child: child)
+      : child;
+
+  // Eigene Anpassung: PC-Bildschirm schwärzen (Privatsphäre-Modus).
+  bool get _lxPrivacyAvailable =>
+      gFFI.ffiModel.pi.features.privacyMode &&
+      gFFI.ffiModel.keyboard &&
+      gFFI.ffiModel.permissions['privacy_mode'] != false;
+
+  void _lxSetPrivacy(bool on, {bool quiet = false}) {
+    final pi = gFFI.ffiModel.pi;
+    final state = PrivacyModeState.find(widget.id);
+    if (state.isNotEmpty == on) return;
+    final impls = pi.platformAdditions[kPlatformAdditionsSupportedPrivacyModeImpl]
+        as List<dynamic>?;
+    if (impls == null) {
+      togglePrivacyModeTime = DateTime.now();
+      bind.sessionToggleOption(sessionId: sessionId, value: 'privacy-mode');
+      return;
+    }
+    if (on && impls.isEmpty) {
+      if (!quiet) showToast('Der PC unterstützt das Schwärzen nicht.');
+      return;
+    }
+    final implKey =
+        on ? (impls[0] as List<dynamic>)[0] as String : state.value;
+    if (on &&
+        pi.currentDisplay != 0 &&
+        !allowDisplaySwitchInPrivacyMode(pi, implKey)) {
+      if (!quiet) showToast('Bitte zuerst Bildschirm 1 wählen.');
+      return;
+    }
+    togglePrivacyModeTime = DateTime.now();
+    bind.sessionTogglePrivacyMode(
+        sessionId: sessionId, implKey: implKey, on: on);
+  }
+
+  Widget _lxPrivacyButton() {
+    final state = PrivacyModeState.find(widget.id);
+    return Obx(() {
+      final on = state.isNotEmpty;
+      return IconButton(
+        color: Colors.white,
+        tooltip: 'PC-Bildschirm schwärzen',
+        icon: Icon(on ? Icons.desktop_access_disabled : Icons.desktop_windows,
+            color: on ? Colors.white : Colors.white54),
+        onPressed: () => _lxSetPrivacy(!on),
+      );
+    });
+  }
+
   bool get showCursorPaint =>
       !gFFI.ffiModel.isPeerAndroid &&
       !gFFI.canvasModel.cursorEmbedded &&
@@ -784,14 +844,14 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
               right: 10,
               child: QualityMonitor(gFFI.qualityMonitorModel),
             ),
-            Obx(() {
+            _lxPlaceKeyHelp(Obx(() {
               final chatKeyboardRequested =
                   gFFI.chatModel.softKeyboardRequested.value;
               return KeyHelpTools(
                   keyboardIsVisible: keyboardVisibilityController.isVisible &&
                       (_showEdit || chatKeyboardRequested),
                   showGestureHelp: _showGestureHelp);
-            }),
+            })),
             SizedBox(
               width: 0,
               height: 0,
@@ -1070,8 +1130,20 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
 
   InputModel get inputModel => gFFI.inputModel;
 
+  static const _lxArrowIcons = [
+    Icons.keyboard_arrow_left,
+    Icons.keyboard_arrow_up,
+    Icons.keyboard_arrow_down,
+    Icons.keyboard_arrow_right,
+  ];
+
   Widget wrap(String text, void Function() onPressed,
-      {bool? active, IconData? icon}) {
+      {bool? active, IconData? icon, bool lxCustom = false}) {
+    if (!lxCustom &&
+        LxPrefs.isBuiltinKeyHidden(text,
+            arrow: _lxArrowIcons.contains(icon))) {
+      return const LxHiddenKey();
+    }
     return TextButton(
         style: TextButton.styleFrom(
           minimumSize: Size(0, 0),
@@ -1250,7 +1322,8 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
       }),
       // Eigene Anpassung: selbst angelegte Tastenkürzel.
       for (final s in LxPrefs.shortcuts)
-        wrap(s.displayLabel, () => LxKeys.send(inputModel, s)),
+        wrap(s.displayLabel, () => LxKeys.send(inputModel, s),
+            lxCustom: true),
     ];
     final space = size.width > 320 ? 4.0 : 2.0;
     // 500 ms is long enough for this widget to be built!
@@ -1261,15 +1334,21 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
         key: _key,
         color: Color(0xAA000000),
         padding: EdgeInsets.only(
-            top: _keyboardVisibilityController.isVisible ? 24 : 4, bottom: 8),
+            top: _keyboardVisibilityController.isVisible &&
+                    !LxView.keyboardOverlay
+                ? 24
+                : 4,
+            bottom: 8),
         child: Wrap(
           spacing: space,
           runSpacing: space,
-          children: <Widget>[SizedBox(width: 9999)] +
-              modifiers +
-              keys +
-              (_fn ? fn : []) +
-              (_more ? more : []),
+          children: (<Widget>[SizedBox(width: 9999)] +
+                  modifiers +
+                  keys +
+                  (_fn ? fn : []) +
+                  (_more ? more : []))
+              .where((w) => w is! LxHiddenKey)
+              .toList(),
         ));
   }
 }

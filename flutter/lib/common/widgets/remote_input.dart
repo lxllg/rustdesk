@@ -103,6 +103,7 @@ class _RawTouchGestureDetectorRegionState
   // `onDoubleTap()` does not provide the position of the tap event.
   Offset _lastPosOfDoubleTapDown = Offset.zero;
   bool _touchModePanStarted = false;
+  bool _lxCanvasPan = false;
   Offset _doubleFinerTapPosition = Offset.zero;
 
   // For mouse mode, we need to block the events when the cursor is in a blocked area.
@@ -376,6 +377,10 @@ class _RawTouchGestureDetectorRegionState
     if (isNotTouchBasedDevice()) {
       return;
     }
+    if (LxTouch.panMovesCanvas(ffi)) {
+      _lxCanvasPan = true;
+      return;
+    }
     if (handleTouch) {
       if (lastTapDownDetails != null) {
         await ffi.cursorModel.move(lastTapDownDetails.localPosition.dx,
@@ -425,6 +430,10 @@ class _RawTouchGestureDetectorRegionState
     if (isNotTouchBasedDevice()) {
       return;
     }
+    if (_lxCanvasPan) {
+      LxTouch.panCanvas(ffi, d.delta);
+      return;
+    }
     if (ffi.cursorModel.shouldBlock(d.localPosition.dx, d.localPosition.dy)) {
       return;
     }
@@ -441,6 +450,10 @@ class _RawTouchGestureDetectorRegionState
 
   onOneFingerPanEnd(DragEndDetails d) async {
     _touchModePanStarted = false;
+    if (_lxCanvasPan) {
+      _lxCanvasPan = false;
+      return;
+    }
     if (isNotTouchBasedDevice()) {
       return;
     }
@@ -461,6 +474,7 @@ class _RawTouchGestureDetectorRegionState
   // double-click problem on iPad with magic mouse.
   onOneFingerPanCancel() {
     _touchModePanStarted = false;
+    _lxCanvasPan = false;
   }
 
   // scale + pan event

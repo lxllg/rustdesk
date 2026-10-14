@@ -13,7 +13,7 @@ class LxTouch {
   static Future<bool> handle(FFI ffi, String gesture, Offset localPos) async {
     if (!isMobile || !ffi.ffiModel.touchMode) return false;
     final action = LxPrefs.touchAction(gesture);
-    if (action == LxPrefs.gestureDefaults[gesture]) return false;
+    if (action == LxPrefs.gestureRustdesk[gesture]) return false;
     if (action == LxPrefs.actionNone) return true;
     final moved = await ffi.cursorModel.move(localPos.dx, localPos.dy);
     if (!moved) return true;
@@ -32,6 +32,10 @@ class LxTouch {
         await input.tap(MouseButtons.left);
         await input.tap(MouseButtons.left);
         break;
+      case LxPrefs.actionDrag:
+        // Loslassen schickt «Maustaste hoch» (onLongPressUp im Original-Code).
+        await input.tapDown(MouseButtons.left);
+        break;
       case LxPrefs.actionMove:
       default:
         break;
@@ -40,15 +44,32 @@ class LxTouch {
   }
 
   /// Bei «Lange drücken = Mauszeiger bewegen» folgt der Zeiger dem Finger.
-  static bool followsFingerOnLongPress(FFI ffi) =>
+  static bool followsFingerOnLongPress(FFI ffi) {
+    if (!isMobile || !ffi.ffiModel.touchMode) return false;
+    final a = LxPrefs.touchAction(LxPrefs.gestureLongPress);
+    return a == LxPrefs.actionMove || a == LxPrefs.actionDrag;
+  }
+
+  /// Wischen mit 1 Finger verschiebt das Bild statt die Maus zu ziehen.
+  static bool panMovesCanvas(FFI ffi) =>
       isMobile &&
       ffi.ffiModel.touchMode &&
-      LxPrefs.touchAction(LxPrefs.gestureLongPress) == LxPrefs.actionMove;
+      LxPrefs.oneFingerPan == LxPrefs.panCanvas;
+
+  static void panCanvas(FFI ffi, Offset delta) {
+    if (ffi.canvasModel.locked) return;
+    final d = LxPrefs.panInvert ? -delta : delta;
+    ffi.canvasModel.panX(d.dx);
+    ffi.canvasModel.panY(d.dy);
+  }
 }
 
 /// Eigene Anpassung: Zoom und Verschieben auf das PC-Bild begrenzen.
 class LxView {
   static bool get _on => isMobile && LxPrefs.limitZoom;
+
+  /// Tastatur verdeckt nur den unteren Teil, das Bild bleibt stehen.
+  static bool get keyboardOverlay => isMobile && LxPrefs.keyboardOverlay;
 
   /// Kleinster Zoom = PC-Bild füllt die Breite der Ansicht.
   static double? minScale(double viewWidth, int contentWidth) {
