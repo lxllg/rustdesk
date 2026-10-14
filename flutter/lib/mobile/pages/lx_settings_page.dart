@@ -218,13 +218,15 @@ class LxPrefs {
 
   /// Vorhandene Tasten der Leiste über der Tastatur, die sich ausblenden lassen.
   static const builtinKeys = <String>[
-    'Ctrl', 'Alt', 'Shift', 'Win', 'Fn', 'Esc', 'Tab', 'Home', 'End', 'Ins',
+    'Ctrl', 'Alt', 'Shift', 'Win', 'Fn', 'pin', '...', 'Esc', 'Tab', 'Home', 'End', 'Ins',
     'Del', 'PgUp', 'PgDn', 'PrtScr', 'ScrollLock', 'Pause', 'Menu', 'Enter',
     'arrows', 'Ctrl+C', 'Ctrl+V', 'Ctrl+S',
   ];
 
   static const builtinKeyLabels = <String, String>{
     'Fn': 'Fn (F1–F12)',
+    'pin': 'Pin (Leiste ohne Tastatur anzeigen)',
+    '...': '… (weitere Tasten ein-/ausklappen)',
     'Home': 'Home (Pos1)',
     'End': 'End (Ende)',
     'Ins': 'Ins (Einfg)',
@@ -256,10 +258,12 @@ class LxPrefs {
 
   /// [text] = Beschriftung in der Leiste (z. B. ' Alt ', 'Cmd+C'),
   /// [arrow] = true für die Pfeiltasten.
-  static bool isBuiltinKeyHidden(String text, {bool arrow = false}) {
+  static bool isBuiltinKeyHidden(String text,
+      {bool arrow = false, bool pin = false}) {
     final hidden = hiddenKeys;
     if (hidden.isEmpty) return false;
     if (arrow) return hidden.contains('arrows');
+    if (pin) return hidden.contains('pin');
     var id = text.trim().replaceAll('Cmd', text.contains('+') ? 'Ctrl' : 'Win');
     return hidden.contains(id);
   }
@@ -280,6 +284,35 @@ class LxPrefs {
   static const _kPanInvert = 'lx-pan-invert';
   static bool get panInvert => _get(_kPanInvert) == 'Y';
   static Future<void> setPanInvert(bool v) => _set(_kPanInvert, v ? 'Y' : 'N');
+
+  // ---------- Anzeige-Modus ----------
+
+  static const viewFree = 'free';
+  static const viewFixed = 'fixed';
+  static const viewModeLabels = <String, String>{
+    viewFree: 'Frei zoomen (Standard)',
+    viewFixed: 'Fester Zoom: links/rechts verschiebt, hoch/runter scrollt',
+  };
+  static const _kViewMode = 'lx-view-mode';
+  static String get viewMode =>
+      _get(_kViewMode) == viewFixed ? viewFixed : viewFree;
+  static Future<void> setViewMode(String v) => _set(_kViewMode, v);
+
+  static const zoomHeight = 'height';
+  static const zoomWidth = 'width';
+  static const zoomOriginal = 'original';
+  static const fixedZoomLabels = <String, String>{
+    zoomHeight: 'Höhe füllen',
+    zoomWidth: 'Breite füllen',
+    zoomOriginal: 'Originalgrösse (1 PC-Pixel = 1 Handy-Pixel)',
+  };
+  static const _kFixedZoom = 'lx-fixed-zoom';
+  static String get fixedZoom {
+    final v = _get(_kFixedZoom);
+    return fixedZoomLabels.containsKey(v) ? v : zoomHeight;
+  }
+
+  static Future<void> setFixedZoom(String v) => _set(_kFixedZoom, v);
 
   // ---------- Zoom begrenzen ----------
 
@@ -672,6 +705,33 @@ class _LxSettingsPageState extends State<LxSettingsPage> {
           SettingsSection(
             title: const Text('Ansicht'),
             tiles: [
+              SettingsTile(
+                leading: const Icon(Icons.aspect_ratio),
+                title: const Text('Anzeige-Modus'),
+                description:
+                    Text(LxPrefs.viewModeLabels[LxPrefs.viewMode]!),
+                onPressed: (context) => _pickOption(
+                  title: 'Anzeige-Modus',
+                  options: LxPrefs.viewModeLabels,
+                  current: LxPrefs.viewMode,
+                  onSelected: LxPrefs.setViewMode,
+                ),
+              ),
+              if (LxPrefs.viewMode == LxPrefs.viewFixed)
+                SettingsTile(
+                  leading: const Icon(Icons.zoom_in),
+                  title: const Text('Zoomstufe im festen Modus'),
+                  description: Text(
+                      '${LxPrefs.fixedZoomLabels[LxPrefs.fixedZoom]!} – gilt '
+                      'ab der nächsten Verbindung. Start mittig, kein Zoomen '
+                      'mit zwei Fingern, hoch/runter wischen scrollt am PC.'),
+                  onPressed: (context) => _pickOption(
+                    title: 'Zoomstufe',
+                    options: LxPrefs.fixedZoomLabels,
+                    current: LxPrefs.fixedZoom,
+                    onSelected: LxPrefs.setFixedZoom,
+                  ),
+                ),
               SettingsTile.switchTile(
                 leading: const Icon(Icons.fit_screen),
                 title: const Text('Zoom auf Bildschirmbreite begrenzen'),

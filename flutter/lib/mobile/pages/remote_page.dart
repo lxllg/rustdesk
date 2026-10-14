@@ -1146,7 +1146,8 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
       {bool? active, IconData? icon, bool lxCustom = false}) {
     if (!lxCustom &&
         LxPrefs.isBuiltinKeyHidden(text,
-            arrow: _lxArrowIcons.contains(icon))) {
+            arrow: _lxArrowIcons.contains(icon),
+            pin: icon == Icons.push_pin)) {
       return const LxHiddenKey();
     }
     return TextButton(

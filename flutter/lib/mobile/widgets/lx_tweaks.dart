@@ -60,19 +60,74 @@ class LxTouch {
       isMobile &&
       ffi.ffiModel.touchMode &&
       !ffi.ffiModel.isPeerMobile &&
-      LxPrefs.oneFingerPan == LxPrefs.panCanvas;
+      (LxPrefs.oneFingerPan == LxPrefs.panCanvas || LxView.fixedMode);
+
+  // Fester Modus: Die Richtung wird zu Beginn jeder Wischbewegung festgelegt.
+  static Offset _acc = Offset.zero;
+  static int _axis = 0; // 0 = offen, 1 = waagrecht, 2 = senkrecht
+  static double _scrollAcc = 0;
+
+  static void panStart() {
+    _acc = Offset.zero;
+    _axis = 0;
+    _scrollAcc = 0;
+  }
 
   static void panCanvas(FFI ffi, Offset delta) {
     if (ffi.canvasModel.locked) return;
     final d = LxPrefs.panInvert ? -delta : delta;
-    ffi.canvasModel.panX(d.dx);
-    ffi.canvasModel.panY(d.dy);
+    if (!LxView.fixedMode) {
+      ffi.canvasModel.panX(d.dx);
+      ffi.canvasModel.panY(d.dy);
+      return;
+    }
+    if (_axis == 0) {
+      _acc += delta;
+      if (_acc.distance < 12) return;
+      _axis = _acc.dx.abs() >= _acc.dy.abs() ? 1 : 2;
+    }
+    if (_axis == 1) {
+      ffi.canvasModel.panX(d.dx);
+      return;
+    }
+    // Senkrecht: als Mausrad an den PC senden (gleiche Richtung wie das
+    // Scrollen am rechten Rand).
+    _scrollAcc += d.dy;
+    final step = LxPrefs.edgeScrollStepPx;
+    while (_scrollAcc.abs() >= step) {
+      final dir = _scrollAcc > 0 ? 1 : -1;
+      ffi.inputModel.scroll(dir);
+      _scrollAcc -= dir * step;
+    }
   }
 }
 
 /// Eigene Anpassung: Zoom und Verschieben auf das PC-Bild begrenzen.
 class LxView {
-  static bool get _on => isMobile && LxPrefs.limitZoom;
+  static bool get _on => isMobile && (LxPrefs.limitZoom || fixedMode);
+
+  /// Fester Zoom: kein Zoomen, Start mittig, hoch/runter scrollt am PC.
+  static bool get fixedMode => isMobile && LxPrefs.viewMode == LxPrefs.viewFixed;
+
+  // Ungefähre Höhe der Fusszeile, die unten über dem Bild liegt.
+  static const _footer = 56.0;
+
+  static double fixedScale(Size view, int dw, int dh, double dpr) {
+    if (dw <= 0 || dh <= 0 || view.width <= 0 || view.height <= 0) return 1;
+    switch (LxPrefs.fixedZoom) {
+      case LxPrefs.zoomWidth:
+        return view.width / dw;
+      case LxPrefs.zoomOriginal:
+        return dpr > 0 ? 1 / dpr : 1;
+      default:
+        final h = view.height - _footer;
+        return (h > 0 ? h : view.height) / dh;
+    }
+  }
+
+  /// Senkrecht mittig im sichtbaren Bereich über der Fusszeile.
+  static double fixedTop(double viewHeight, double contentHeight) =>
+      (viewHeight - _footer - contentHeight) / 2;
 
   /// Tastatur verdeckt nur den unteren Teil, das Bild bleibt stehen.
   static bool get keyboardOverlay => isMobile && LxPrefs.keyboardOverlay;

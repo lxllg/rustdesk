@@ -2451,6 +2451,13 @@ class CanvasModel with ChangeNotifier {
   }
 
   _resetCanvasOffset(int displayWidth, int displayHeight) {
+    if (LxView.fixedMode) {
+      _scale = LxView.fixedScale(
+          size, displayWidth, displayHeight, _devicePixelRatio);
+      _x = (size.width - displayWidth * _scale) / 2;
+      _y = LxView.fixedTop(size.height, displayHeight * _scale);
+      return;
+    }
     if (isMobile) {
       _scale = LxView.limitScale(_scale, size.width, displayWidth);
     }
@@ -2745,6 +2752,7 @@ class CanvasModel with ChangeNotifier {
   // mobile only
   updateScale(double v, Offset focalPoint) {
     if (parent.target?.imageModel.image == null) return;
+    if (LxView.fixedMode) return;
     final s = _scale;
     _scale *= v;
     final maxs = parent.target?.imageModel.maxScale ?? 1;

@@ -12,7 +12,7 @@ import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/input_model.dart';
 
 import './gestures.dart';
-import '../../mobile/widgets/lx_tweaks.dart' show LxTouch;
+import '../../mobile/widgets/lx_tweaks.dart' show LxTouch, LxView;
 
 class RawKeyFocusScope extends StatelessWidget {
   final FocusNode? focusNode;
@@ -379,6 +379,7 @@ class _RawTouchGestureDetectorRegionState
     }
     if (LxTouch.panMovesCanvas(ffi)) {
       _lxCanvasPan = true;
+      LxTouch.panStart();
       return;
     }
     if (handleTouch) {
@@ -487,6 +488,7 @@ class _RawTouchGestureDetectorRegionState
       // Initialize the last focal point to calculate deltas manually.
       _lastSpecialHoldDragFocalPoint = d.focalPoint;
     }
+    if (LxView.fixedMode) LxTouch.panStart();
   }
 
   onTwoFingerScaleUpdate(ScaleUpdateDetails d) async {
@@ -504,6 +506,12 @@ class _RawTouchGestureDetectorRegionState
     }
 
     if (canvasLocked) return;
+
+    // Eigene Anpassung: fester Zoom – zwei Finger wirken wie einer.
+    if (LxView.fixedMode) {
+      LxTouch.panCanvas(ffi, d.focalPointDelta);
+      return;
+    }
 
     if ((isDesktop || isWebDesktop)) {
       final scale = ((d.scale - _scale) * 1000).toInt();
