@@ -730,7 +730,10 @@ class _LxSettingsPageState extends State<LxSettingsPage> {
                               : '')),
                   onPressed: (context) => _pickOption(
                     title: LxPrefs.gestureLabels[g]!,
-                    options: LxPrefs.actionLabels,
+                    options: g == LxPrefs.gestureLongPress
+                        ? LxPrefs.actionLabels
+                        : (Map.of(LxPrefs.actionLabels)
+                          ..remove(LxPrefs.actionDrag)),
                     current: LxPrefs.touchAction(g),
                     onSelected: (v) => LxPrefs.setTouchAction(g, v),
                   ),

@@ -592,7 +592,12 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                         : SafeArea(
                             child:
                                 OrientationBuilder(builder: (ctx, orientation) {
-                              if (_currentOrientation != orientation) {
+                              // Eigene Anpassung: Die Tastatur verkleinert die
+                              // Ansicht; das ist keine Drehung und soll das
+                              // Bild nicht neu ausrichten.
+                              if (_currentOrientation != orientation &&
+                                  !(LxView.keyboardOverlay &&
+                                      keyboardVisibilityController.isVisible)) {
                                 Timer(const Duration(milliseconds: 200), () {
                                   gFFI.dialogManager
                                       .resetMobileActionsOverlay(ffi: gFFI);

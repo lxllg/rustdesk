@@ -33,8 +33,13 @@ class LxTouch {
         await input.tap(MouseButtons.left);
         break;
       case LxPrefs.actionDrag:
-        // Loslassen schickt «Maustaste hoch» (onLongPressUp im Original-Code).
-        await input.tapDown(MouseButtons.left);
+        // Nur beim langen Drücken folgt ein «Maustaste hoch» (onLongPressUp
+        // im Original-Code); bei anderen Gesten wird normal geklickt.
+        if (gesture == LxPrefs.gestureLongPress) {
+          await input.tapDown(MouseButtons.left);
+        } else {
+          await input.tap(MouseButtons.left);
+        }
         break;
       case LxPrefs.actionMove:
       default:
@@ -54,6 +59,7 @@ class LxTouch {
   static bool panMovesCanvas(FFI ffi) =>
       isMobile &&
       ffi.ffiModel.touchMode &&
+      !ffi.ffiModel.isPeerMobile &&
       LxPrefs.oneFingerPan == LxPrefs.panCanvas;
 
   static void panCanvas(FFI ffi, Offset delta) {
