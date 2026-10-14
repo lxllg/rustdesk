@@ -114,19 +114,56 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   final TextEditingController _textController =
       TextEditingController(text: initText);
 
-  // Eigene Anpassungen, einmal pro Verbindung gelesen.
-  final bool _lxEdgeScroll = LxPrefs.edgeScrollEnabled;
-  final bool _lxBarAlwaysVisible = LxPrefs.barAlwaysVisible;
-  final Set<String> _lxBarItems = LxPrefs.enabledBarItems;
+  // Eigene Anpassungen; neu gelesen, wenn sie während der Verbindung
+  // geändert werden (siehe _lxOpenSettings).
+  bool _lxEdgeScroll = LxPrefs.edgeScrollEnabled;
+  bool _lxBarAlwaysVisible = LxPrefs.barAlwaysVisible;
+  Set<String> _lxBarItems = LxPrefs.enabledBarItems;
   // Statt alle Systemleisten auszublenden, bleibt auf Wunsch die
   // Android-Navigationsleiste sichtbar.
-  final List<SystemUiOverlay> _lxVisibleOverlays =
+  List<SystemUiOverlay> _lxVisibleOverlays =
       LxPrefs.showSystemNav ? [SystemUiOverlay.bottom] : [];
+
+  void _lxReloadPrefs() {
+    _lxEdgeScroll = LxPrefs.edgeScrollEnabled;
+    _lxBarAlwaysVisible = LxPrefs.barAlwaysVisible;
+    _lxBarItems = LxPrefs.enabledBarItems;
+    _lxVisibleOverlays = LxPrefs.showSystemNav ? [SystemUiOverlay.bottom] : [];
+    if (_lxBarAlwaysVisible) _showBar = true;
+  }
+
+  String _lxViewSnapshot() =>
+      '${LxPrefs.viewMode}|${LxPrefs.fixedZoom}|${LxPrefs.limitZoom}';
+
+  // Eigene Anpassung: Einstellungen während der Verbindung öffnen.
+  Future<void> _lxOpenSettings() async {
+    final viewBefore = _lxViewSnapshot();
+    final keepAliveBefore = LxPrefs.keepAlive;
+    setState(() => _showEdit = false);
+    // Damit Eingabefelder in den Einstellungen die Tastatur öffnen können.
+    await gFFI.invokeMethod("enable_soft_keyboard", true);
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
+        overlays: SystemUiOverlay.values);
+    if (!mounted) return;
+    await Navigator.push(context,
+        MaterialPageRoute(builder: (_) => const LxSettingsPage()));
+    if (!mounted) return;
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
+        overlays: LxPrefs.showSystemNav ? [SystemUiOverlay.bottom] : []);
+    _disableAndroidSoftKeyboard(
+        isKeyboardVisible: keyboardVisibilityController.isVisible);
+    if (isAndroid && LxPrefs.keepAlive != keepAliveBefore) {
+      gFFI.invokeMethod("lx_session_keepalive", LxPrefs.keepAlive);
+    }
+    if (_lxViewSnapshot() != viewBefore) gFFI.canvasModel.reset();
+    _physicalFocusNode.requestFocus();
+    if (mounted) setState(_lxReloadPrefs);
+  }
 
   // Werte werden hier frisch gelesen, weil der Aufrufer in einem
   // OverlayEntry-Builder steckt, der nur beim ersten Build erzeugt wird.
   bool _lxEdgeScrollActive() =>
-      _lxEdgeScroll &&
+      (_lxEdgeScroll || LxTouch.edgePan(gFFI)) &&
       !(keyboardVisibilityController.isVisible && _showEdit) &&
       !_showGestureHelp &&
       !inputModel.isPhysicalMouse.value &&
@@ -191,7 +228,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         _registerMobileChatShortcut();
         if (LxPrefs.autoPrivacy) {
           Future.delayed(const Duration(milliseconds: 800), () {
-            if (mounted && _lxPrivacyAvailable) _lxSetPrivacy(true, quiet: true);
+            if (mounted) _lxSetPrivacy(true, quiet: true);
           });
         }
         registerToolbarShortcuts(context, widget.id, gFFI);
@@ -610,6 +647,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                                 child: EdgeScrollOverlay(
                                   ffi: gFFI,
                                   enabled: _lxEdgeScrollActive(),
+                                  edgePan: LxTouch.edgePan(gFFI),
                                   child: inputModel.isPhysicalMouse.value
                                       ? getBodyForMobile()
                                       : RawTouchGestureDetectorRegion(
@@ -694,8 +732,15 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
               ),
       if (canInput && !gFFI.ffiModel.isPeerAndroid && show(LxPrefs.barLock))
         _lxLockButton(),
-      if (canInput && _lxPrivacyAvailable && show(LxPrefs.barPrivacy))
+      if (canInput && !gFFI.ffiModel.isPeerAndroid && show(LxPrefs.barPrivacy))
         _lxPrivacyButton(),
+      if (show(LxPrefs.barSettings))
+        IconButton(
+          color: Colors.white,
+          tooltip: 'Eigene Anpassungen',
+          icon: const Icon(Icons.tune),
+          onPressed: _lxOpenSettings,
+        ),
       if (!isWeb && show(LxPrefs.barChat))
         futureBuilder(
             future: gFFI.invokeMethod("get_value", "KEY_IS_SUPPORT_VOICE_CALL"),
@@ -786,15 +831,34 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       : child;
 
   // Eigene Anpassung: PC-Bildschirm schwärzen (Privatsphäre-Modus).
-  bool get _lxPrivacyAvailable =>
-      gFFI.ffiModel.pi.features.privacyMode &&
-      gFFI.ffiModel.keyboard &&
-      gFFI.ffiModel.permissions['privacy_mode'] != false;
+  // Gibt den Grund zurück, warum es nicht geht, oder null.
+  String? _lxPrivacyProblem() {
+    final ffiModel = gFFI.ffiModel;
+    if (!ffiModel.keyboard) {
+      return 'Schwärzen geht nur mit Maus-/Tastatursteuerung.';
+    }
+    if (ffiModel.permissions['privacy_mode'] == false) {
+      return 'Am PC ist das Schwärzen nicht erlaubt. In RustDesk am PC unter '
+          'Einstellungen › Sicherheit › Berechtigungen '
+          '«Privatsphäre-Modus aktivieren» einschalten.';
+    }
+    if (!ffiModel.pi.features.privacyMode) {
+      return 'Der PC meldet, dass er das Schwärzen nicht unterstützt. Nötig: '
+          'RustDesk am PC installiert (nicht die portable Version), aktuelle '
+          'Version, Windows 10 ab Version 2004.';
+    }
+    return null;
+  }
 
   void _lxSetPrivacy(bool on, {bool quiet = false}) {
     final pi = gFFI.ffiModel.pi;
     final state = PrivacyModeState.find(widget.id);
     if (state.isNotEmpty == on) return;
+    final problem = on ? _lxPrivacyProblem() : null;
+    if (problem != null) {
+      showToast(problem, timeout: const Duration(seconds: 8));
+      return;
+    }
     final impls = pi.platformAdditions[kPlatformAdditionsSupportedPrivacyModeImpl]
         as List<dynamic>?;
     if (impls == null) {
@@ -961,6 +1025,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     final menus = toolbarControls(context, id, gFFI);
 
     final List<PopupMenuEntry<int>> more = [
+      const PopupMenuItem<int>(value: -1, child: Text('Eigene Anpassungen')),
+      PopupMenuDivider(),
       ...mobileActionMenus
           .asMap()
           .entries
@@ -983,6 +1049,10 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         items: more,
         elevation: 8,
       );
+      if (index == -1) {
+        _lxOpenSettings();
+        return;
+      }
       if (index != null) {
         if (index < mobileActionMenus.length) {
           mobileActionMenus[index].onPressed?.call();

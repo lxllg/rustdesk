@@ -111,6 +111,7 @@ class LxPrefs {
   static const barMode = 'mode';
   static const barLock = 'lock';
   static const barPrivacy = 'privacy';
+  static const barSettings = 'settings';
   static const barChat = 'chat';
   static const barMore = 'more';
 
@@ -122,6 +123,7 @@ class LxPrefs {
     barMode,
     barLock,
     barPrivacy,
+    barSettings,
     barChat,
     barMore,
   ];
@@ -133,6 +135,7 @@ class LxPrefs {
     barMode: 'Maus-/Touch-Modus (bei Android-Geräten: Werkzeuge)',
     barLock: 'Nach Sitzungsende sperren (Ein/Aus)',
     barPrivacy: 'PC-Bildschirm schwärzen (Ein/Aus)',
+    barSettings: 'Eigene Anpassungen öffnen',
     barChat: 'Chat / Sprachanruf',
     barMore: 'Weitere Aktionen',
   };
@@ -144,6 +147,7 @@ class LxPrefs {
     barMode: Icons.touch_app,
     barLock: Icons.lock_outline,
     barPrivacy: Icons.desktop_access_disabled,
+    barSettings: Icons.tune,
     barChat: Icons.message,
     barMore: Icons.more_vert,
   };
@@ -154,6 +158,7 @@ class LxPrefs {
   static const _lateBarItems = <String, String>{
     barLock: 'lx-bar-lock',
     barPrivacy: 'lx-bar-privacy',
+    barSettings: 'lx-bar-settings',
   };
 
   static Set<String> get enabledBarItems {
@@ -272,13 +277,18 @@ class LxPrefs {
 
   static const panCanvas = 'canvas';
   static const panDrag = 'drag';
+  static const panEdges = 'edges';
   static const panLabels = <String, String>{
     panCanvas: 'Bild verschieben',
     panDrag: 'Maus ziehen / markieren (wie RustDesk)',
+    panEdges: 'Mitte: ziehen / markieren – Ränder links/rechts: Bild '
+        'verschieben (halten) und scrollen (hoch/runter wischen)',
   };
   static const _kOneFingerPan = 'lx-one-finger-pan';
-  static String get oneFingerPan =>
-      _get(_kOneFingerPan) == panDrag ? panDrag : panCanvas;
+  static String get oneFingerPan {
+    final v = _get(_kOneFingerPan);
+    return panLabels.containsKey(v) ? v : panCanvas;
+  }
   static Future<void> setOneFingerPan(String v) => _set(_kOneFingerPan, v);
 
   static const _kPanInvert = 'lx-pan-invert';

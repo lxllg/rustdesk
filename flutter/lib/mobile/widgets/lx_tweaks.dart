@@ -60,7 +60,14 @@ class LxTouch {
       isMobile &&
       ffi.ffiModel.touchMode &&
       !ffi.ffiModel.isPeerMobile &&
-      (LxPrefs.oneFingerPan == LxPrefs.panCanvas || LxView.fixedMode);
+      LxPrefs.oneFingerPan == LxPrefs.panCanvas;
+
+  /// Ränder links/rechts verschieben das Bild, die Mitte zieht/markiert.
+  static bool edgePan(FFI ffi) =>
+      isMobile &&
+      ffi.ffiModel.touchMode &&
+      !ffi.ffiModel.isPeerMobile &&
+      LxPrefs.oneFingerPan == LxPrefs.panEdges;
 
   // Fester Modus: Die Richtung wird zu Beginn jeder Wischbewegung festgelegt.
   static Offset _acc = Offset.zero;
