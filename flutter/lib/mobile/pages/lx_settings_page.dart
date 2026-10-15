@@ -291,6 +291,12 @@ class LxPrefs {
   }
   static Future<void> setOneFingerPan(String v) => _set(_kOneFingerPan, v);
 
+  /// Zwei Finger in dieselbe Richtung: nur verschieben, nicht zoomen.
+  static const _kTwoFingerPan = 'lx-two-finger-pan';
+  static bool get twoFingerPan => _get(_kTwoFingerPan) != 'N';
+  static Future<void> setTwoFingerPan(bool v) =>
+      _set(_kTwoFingerPan, v ? 'Y' : 'N');
+
   static const _kPanInvert = 'lx-pan-invert';
   static bool get panInvert => _get(_kPanInvert) == 'Y';
   static Future<void> setPanInvert(bool v) => _set(_kPanInvert, v ? 'Y' : 'N');
@@ -372,6 +378,7 @@ class LxPrefs {
   static const actionDouble = 'double';
   static const actionMiddle = 'middle';
   static const actionMove = 'move';
+  static const actionMoveClick = 'moveclick';
   static const actionDrag = 'drag';
   static const actionNone = 'none';
 
@@ -381,6 +388,7 @@ class LxPrefs {
     actionDouble: 'Doppelklick',
     actionMiddle: 'Mittelklick',
     actionMove: 'Nur Mauszeiger hierher bewegen',
+    actionMoveClick: 'Mauszeiger hierher bewegen + Linksklick',
     actionDrag: 'Klicken & ziehen (Maustaste halten)',
     actionNone: 'Nichts',
   };
@@ -784,6 +792,19 @@ class _LxSettingsPageState extends State<LxSettingsPage> {
                     setState(() {});
                   },
                 ),
+              SettingsTile.switchTile(
+                leading: const Icon(Icons.pan_tool_outlined),
+                title: const Text('Zwei Finger in dieselbe Richtung: Bild verschieben'),
+                description: const Text(
+                    'Bewegen sich beide Finger parallel, wird nur verschoben '
+                    'und nicht gezoomt. Zoomen geht weiterhin durch '
+                    'Auseinander-/Zusammenziehen.'),
+                initialValue: LxPrefs.twoFingerPan,
+                onToggle: (v) async {
+                  await LxPrefs.setTwoFingerPan(v);
+                  setState(() {});
+                },
+              ),
               for (final g in LxPrefs.gestures)
                 SettingsTile(
                   leading: const Icon(Icons.gesture),

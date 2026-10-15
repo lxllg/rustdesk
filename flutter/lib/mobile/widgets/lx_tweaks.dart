@@ -51,6 +51,44 @@ class LxTouch {
     return true;
   }
 
+  /// Maus-Modus: «Tippen = Mauszeiger hierher + Linksklick».
+  /// Gibt true zurück, wenn erledigt (dann kein Klick an alter Stelle).
+  static Future<bool> mouseModeTap(FFI ffi, Offset? localPos) async {
+    if (!isMobile || ffi.ffiModel.touchMode || localPos == null) return false;
+    if (LxPrefs.touchAction(LxPrefs.gestureTap) != LxPrefs.actionMoveClick) {
+      return false;
+    }
+    final moved = await ffi.cursorModel.move(localPos.dx, localPos.dy);
+    if (moved) await ffi.inputModel.tap(MouseButtons.left);
+    return true;
+  }
+
+  // Zwei Finger: 0 = offen, 1 = verschieben, 2 = zoomen (wie RustDesk).
+  static int _twoMode = 0;
+  static Offset _twoMove = Offset.zero;
+
+  static void twoFingerStart() {
+    _twoMode = 0;
+    _twoMove = Offset.zero;
+  }
+
+  /// true = nur verschieben (bereits erledigt), false = Original-Code (zoomen).
+  static bool twoFingerPan(FFI ffi, double scale, Offset focalDelta) {
+    if (!isMobile || !LxPrefs.twoFingerPan) return false;
+    if (_twoMode == 0) {
+      if ((scale - 1).abs() > 0.06) {
+        _twoMode = 2;
+      } else {
+        _twoMove += focalDelta;
+        if (_twoMove.distance > 16) _twoMode = 1;
+      }
+    }
+    if (_twoMode == 2) return false;
+    ffi.canvasModel.panX(focalDelta.dx);
+    ffi.canvasModel.panY(focalDelta.dy);
+    return true;
+  }
+
   /// Bei «Lange drücken = Mauszeiger bewegen» folgt der Zeiger dem Finger.
   static bool followsFingerOnLongPress(FFI ffi) {
     if (!isMobile || !ffi.ffiModel.touchMode) return false;

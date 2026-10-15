@@ -194,6 +194,9 @@ class _RawTouchGestureDetectorRegionState
         return;
       }
       // Mobile, "Mouse mode"
+      if (await LxTouch.mouseModeTap(ffi, _lastTapDownPositionForMouseMode)) {
+        return;
+      }
       await inputModel.tap(MouseButtons.left);
     }
   }
@@ -489,6 +492,7 @@ class _RawTouchGestureDetectorRegionState
       _lastSpecialHoldDragFocalPoint = d.focalPoint;
     }
     if (LxView.fixedMode) LxTouch.panStart();
+    LxTouch.twoFingerStart();
   }
 
   onTwoFingerScaleUpdate(ScaleUpdateDetails d) async {
@@ -527,6 +531,7 @@ class _RawTouchGestureDetectorRegionState
       }
     } else {
       // mobile
+      if (LxTouch.twoFingerPan(ffi, d.scale, d.focalPointDelta)) return;
       ffi.canvasModel.updateScale(d.scale / _scale, d.focalPoint);
       _scale = d.scale;
       ffi.canvasModel.panX(d.focalPointDelta.dx);
