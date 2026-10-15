@@ -23,6 +23,7 @@ class LxTouch {
     final input = ffi.inputModel;
     switch (action) {
       case LxPrefs.actionLeft:
+      case LxPrefs.actionMoveClick:
         await input.tap(MouseButtons.left);
         break;
       case LxPrefs.actionRight:
