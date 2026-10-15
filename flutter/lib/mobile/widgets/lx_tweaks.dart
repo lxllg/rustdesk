@@ -1,4 +1,7 @@
+import 'dart:async';
 import 'dart:ui';
+
+import 'package:get/get.dart';
 
 import '../../common.dart';
 import '../../models/input_model.dart';
@@ -173,6 +176,38 @@ class LxView {
     if (pos < min) return min;
     if (pos > 0) return 0;
     return pos;
+  }
+}
+
+/// Eigene Anpassung: Schwärzen ohne Meldung in der Bildschirmmitte.
+/// Der Zustand erscheint stattdessen als kleines Zeichen am Symbol in der
+/// Fusszeile (Häkchen = ein, X = aus, Kreis = wird umgeschaltet).
+class LxPrivacyUi {
+  /// Gewünschter Zustand, solange das Umschalten läuft (sonst null).
+  static final target = Rxn<bool>();
+  static Timer? _timer;
+
+  static void start(bool on) {
+    _timer?.cancel();
+    target.value = on;
+    _timer = Timer(const Duration(seconds: 12), done);
+  }
+
+  static void done() {
+    _timer?.cancel();
+    _timer = null;
+    target.value = null;
+  }
+
+  /// true = Meldung von RustDesk nicht als Dialog anzeigen.
+  static bool intercept(String? type, String? title, String? text) {
+    if (!isMobile || title != 'Privacy mode') return false;
+    done();
+    // Ein-/Ausschalten hat geklappt: das Symbol zeigt es bereits.
+    if (type == 'custom-nocancel') return true;
+    // Fehler kurz unten einblenden statt als Dialog in der Mitte.
+    showToast('Schwärzen: ${translate(text ?? '')}');
+    return true;
   }
 }
 

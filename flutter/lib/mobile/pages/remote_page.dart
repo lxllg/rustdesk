@@ -106,6 +106,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   var _showEdit = false; // use soft keyboard
 
   Worker? _waylandKeyboardGateWorker;
+  Worker? _lxPrivacyWorker;
   bool _waylandKeyboardGateInitialized = false;
 
   InputModel get inputModel => gFFI.inputModel;
@@ -195,6 +196,9 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
           .showLoading(translate('Connecting...'), onCancel: closeConnection);
     });
     WakelockManager.enable(_uniqueKey);
+    // Schwärzen: sobald der PC den neuen Zustand meldet, Ladekreis beenden.
+    _lxPrivacyWorker =
+        ever(PrivacyModeState.find(widget.id), (_) => LxPrivacyUi.done());
     if (isAndroid && LxPrefs.keepAlive) {
       gFFI.invokeMethod("lx_session_keepalive", true);
     }
@@ -277,6 +281,8 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     _physicalFocusNode.dispose();
     clearWaylandKeyboardPromptSuppressedForConnection(sessionId.toString());
     _waylandKeyboardGateWorker?.dispose();
+    _lxPrivacyWorker?.dispose();
+    LxPrivacyUi.done();
     inputModel.keyboardInputAllowed = true;
     await gFFI.close();
     _timer?.cancel();
@@ -869,6 +875,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         as List<dynamic>?;
     if (impls == null) {
       togglePrivacyModeTime = DateTime.now();
+      LxPrivacyUi.start(on);
       bind.sessionToggleOption(sessionId: sessionId, value: 'privacy-mode');
       return;
     }
@@ -885,6 +892,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       return;
     }
     togglePrivacyModeTime = DateTime.now();
+    LxPrivacyUi.start(on);
     bind.sessionTogglePrivacyMode(
         sessionId: sessionId, implKey: implKey, on: on);
   }
@@ -893,12 +901,29 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     final state = PrivacyModeState.find(widget.id);
     return Obx(() {
       final on = state.isNotEmpty;
+      final target = LxPrivacyUi.target.value;
+      final pending = target != null && target != on;
+      final Widget badge = pending
+          ? const SizedBox(
+              width: 11,
+              height: 11,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: Colors.white),
+            )
+          : Icon(on ? Icons.check_circle : Icons.cancel,
+              size: 13,
+              color: on ? Colors.greenAccent : Colors.redAccent);
       return IconButton(
         color: Colors.white,
         tooltip: 'PC-Bildschirm schwärzen',
-        icon: Icon(on ? Icons.desktop_access_disabled : Icons.desktop_windows,
-            color: on ? Colors.white : Colors.white54),
-        onPressed: () => _lxSetPrivacy(!on),
+        icon: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            const Icon(Icons.desktop_windows, color: Colors.white),
+            Positioned(right: -5, bottom: -5, child: badge),
+          ],
+        ),
+        onPressed: pending ? null : () => _lxSetPrivacy(!on),
       );
     });
   }

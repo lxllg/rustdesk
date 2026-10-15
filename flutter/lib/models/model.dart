@@ -41,7 +41,7 @@ import 'package:vector_math/vector_math.dart' show Vector2;
 import '../common.dart';
 import '../utils/image.dart' as img;
 import '../common/widgets/dialog.dart';
-import '../mobile/widgets/lx_tweaks.dart' show LxView;
+import '../mobile/widgets/lx_tweaks.dart' show LxView, LxPrivacyUi;
 import 'input_model.dart';
 import 'platform_model.dart';
 import 'package:flutter_hbb/utils/scale.dart';
@@ -893,6 +893,7 @@ class FfiModel with ChangeNotifier {
     final title = evt['title'];
     final text = evt['text'];
     final link = evt['link'];
+    if (LxPrivacyUi.intercept(type, title, text)) return;
 
     // The peer-gone detector reconnects under `restarting-show` rather than an error title, so
     // it needs naming here too. By its own title, not the type: an explicitly restarted remote
