@@ -250,6 +250,36 @@ class LxPrivacyUi {
   }
 }
 
+/// Eigene Anpassung: Bei kurzzeitigen Netzwerkfehlern (Server nicht
+/// erreichbar, Adresse nicht auflösbar) still erneut verbinden, statt sofort
+/// eine Fehlermeldung zu zeigen.
+class LxConn {
+  static const maxTries = 4;
+  static int _tries = 0;
+
+  static const _transient = [
+    'Failed to connect to',
+    'failed to lookup address',
+    'No address associated with hostname',
+    'Network is unreachable',
+    'timed out',
+    'Timeout',
+  ];
+
+  /// Neue Verbindung oder erfolgreich verbunden: Zähler zurücksetzen.
+  static void reset() => _tries = 0;
+
+  /// Liefert die Wartezeit bis zum nächsten Versuch, oder null = Meldung zeigen.
+  static Duration? retryDelay(String? type, String? title, String? text) {
+    if (!isMobile || !LxPrefs.autoRetry) return null;
+    if (title != 'Connection Error' || text == null) return null;
+    if (!_transient.any((t) => text.contains(t))) return null;
+    if (_tries >= maxTries) return null;
+    _tries++;
+    return Duration(milliseconds: 1000 + 700 * _tries);
+  }
+}
+
 /// Eigene Anpassung: Tastenkürzel an die Gegenstelle senden.
 class LxKeys {
   static void send(InputModel input, LxShortcut s) {

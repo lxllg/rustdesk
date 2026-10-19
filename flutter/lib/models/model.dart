@@ -41,7 +41,7 @@ import 'package:vector_math/vector_math.dart' show Vector2;
 import '../common.dart';
 import '../utils/image.dart' as img;
 import '../common/widgets/dialog.dart';
-import '../mobile/widgets/lx_tweaks.dart' show LxView, LxPrivacyUi;
+import '../mobile/widgets/lx_tweaks.dart' show LxView, LxPrivacyUi, LxConn;
 import 'input_model.dart';
 import 'platform_model.dart';
 import 'package:flutter_hbb/utils/scale.dart';
@@ -969,6 +969,18 @@ class FfiModel with ChangeNotifier {
       showPrivacyFailedDialog(
           sessionId, type, title, text, link, hasRetry, dialogManager);
     } else {
+      // Eigene Anpassung: kurze Netzwerkfehler still erneut versuchen.
+      final lxDelay = LxConn.retryDelay(type, title, text);
+      if (lxDelay != null) {
+        dialogManager.dismissAll();
+        dialogManager.showLoading(translate('Connecting...'),
+            onCancel: closeConnection);
+        Timer(lxDelay, () {
+          if (parent.target?.closed == true) return;
+          reconnect(dialogManager, sessionId, false);
+        });
+        return;
+      }
       var hasRetry = evt['hasRetry'] == 'true';
       if (!hasRetry) {
         hasRetry = shouldAutoRetryOnOffline(type, title, text);

@@ -196,6 +196,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
           .showLoading(translate('Connecting...'), onCancel: closeConnection);
     });
     WakelockManager.enable(_uniqueKey);
+    LxConn.reset();
     // Schwärzen: sobald der PC den neuen Zustand meldet, Ladekreis beenden.
     _lxPrivacyWorker =
         ever(PrivacyModeState.find(widget.id), (_) => LxPrivacyUi.done());
@@ -219,6 +220,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
       }
       _disableAndroidSoftKeyboard(
           isKeyboardVisible: keyboardVisibilityController.isVisible);
+      LxConn.reset();
       // Seed shortcut action callbacks once the session is ready, so that
       // global keyboard shortcuts work even if the user never opens the
       // toolbar menu. The returned list is intentionally discarded — the

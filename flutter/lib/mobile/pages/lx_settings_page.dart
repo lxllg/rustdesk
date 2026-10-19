@@ -206,6 +206,12 @@ class LxPrefs {
   static bool get keepAlive => _get(_kKeepAlive) != 'N';
   static Future<void> setKeepAlive(bool v) => _set(_kKeepAlive, v ? 'Y' : 'N');
 
+  // ---------- Bei Netzwerkfehlern neu versuchen ----------
+
+  static const _kAutoRetry = 'lx-auto-retry';
+  static bool get autoRetry => _get(_kAutoRetry) != 'N';
+  static Future<void> setAutoRetry(bool v) => _set(_kAutoRetry, v ? 'Y' : 'N');
+
   // ---------- PC-Bildschirm schwärzen ----------
 
   static const _kAutoPrivacy = 'lx-auto-privacy';
@@ -702,6 +708,19 @@ class _LxSettingsPageState extends State<LxSettingsPage> {
                 initialValue: LxPrefs.keepAlive,
                 onToggle: (v) async {
                   await LxPrefs.setKeepAlive(v);
+                  setState(() {});
+                },
+              ),
+              SettingsTile.switchTile(
+                leading: const Icon(Icons.autorenew),
+                title: const Text('Bei Netzwerkfehlern still neu versuchen'),
+                description: const Text(
+                    'Kann der Server kurz nicht erreicht werden (z. B. direkt '
+                    'nach dem Start oder nach einem Netzwechsel), versucht die '
+                    'App es bis zu 4-mal selbst, bevor eine Meldung kommt.'),
+                initialValue: LxPrefs.autoRetry,
+                onToggle: (v) async {
+                  await LxPrefs.setAutoRetry(v);
                   setState(() {});
                 },
               ),
