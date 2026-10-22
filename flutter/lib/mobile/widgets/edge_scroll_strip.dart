@@ -40,6 +40,18 @@ class EdgeScrollOverlay extends StatelessWidget {
     // auch wenn die Zonen ausgeblendet werden. So wird die Ansicht darunter
     // (inkl. Eingabefeld der Bildschirmtastatur) nie neu aufgebaut.
     final width = LxPrefs.edgeScrollWidth;
+    // Mit eingeblendeter virtueller Maus keine Randzonen (RustDesk unverändert).
+    return AnimatedBuilder(
+        animation: ffi.ffiModel.virtualMouseMode,
+        child: child,
+        builder: (context, child) {
+          final on =
+              enabled && !ffi.ffiModel.virtualMouseMode.showVirtualMouse;
+          return _build(child!, width, on);
+        });
+  }
+
+  Widget _build(Widget child, double width, bool enabled) {
     return LayoutBuilder(builder: (context, constraints) {
       return Stack(
         children: [

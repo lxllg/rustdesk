@@ -8,13 +8,27 @@ import '../../models/input_model.dart';
 import '../../models/model.dart';
 import '../pages/lx_settings_page.dart';
 
+/// Ist die virtuelle Maus von RustDesk eingeblendet, greifen die eigenen
+/// Gesten- und Ansichts-Anpassungen nicht – dann gilt RustDesk unverändert.
+class LxOff {
+  static bool get virtualMouse {
+    try {
+      return gFFI.ffiModel.virtualMouseMode.showVirtualMouse;
+    } catch (_) {
+      return false;
+    }
+  }
+}
+
 /// Eigene Anpassung: frei zuordenbare Gesten im Touch-Modus.
 class LxTouch {
   /// Führt die gewählte Aktion für [gesture] aus.
   /// Gibt false zurück, wenn die Standard-Aktion von RustDesk gewählt ist –
   /// dann läuft der Original-Code unverändert weiter.
   static Future<bool> handle(FFI ffi, String gesture, Offset localPos) async {
-    if (!isMobile || !ffi.ffiModel.touchMode) return false;
+    if (!isMobile || !ffi.ffiModel.touchMode || LxOff.virtualMouse) {
+      return false;
+    }
     final action = LxPrefs.touchAction(gesture);
     if (action == LxPrefs.gestureRustdesk[gesture]) return false;
     if (action == LxPrefs.actionNone) return true;
@@ -55,7 +69,12 @@ class LxTouch {
   /// Maus-Modus: «Tippen = Mauszeiger hierher + Linksklick».
   /// Gibt true zurück, wenn erledigt (dann kein Klick an alter Stelle).
   static Future<bool> mouseModeTap(FFI ffi, Offset? localPos) async {
-    if (!isMobile || ffi.ffiModel.touchMode || localPos == null) return false;
+    if (!isMobile ||
+        ffi.ffiModel.touchMode ||
+        localPos == null ||
+        LxOff.virtualMouse) {
+      return false;
+    }
     if (LxPrefs.touchAction(LxPrefs.gestureTap) != LxPrefs.actionMoveClick) {
       return false;
     }
@@ -75,7 +94,7 @@ class LxTouch {
 
   /// true = nur verschieben (bereits erledigt), false = Original-Code (zoomen).
   static bool twoFingerPan(FFI ffi, double scale, Offset focalDelta) {
-    if (!isMobile || !LxPrefs.twoFingerPan) return false;
+    if (!isMobile || !LxPrefs.twoFingerPan || LxOff.virtualMouse) return false;
     if (_twoMode == 0) {
       if ((scale - 1).abs() > 0.06) {
         _twoMode = 2;
@@ -92,7 +111,9 @@ class LxTouch {
 
   /// Bei «Lange drücken = Mauszeiger bewegen» folgt der Zeiger dem Finger.
   static bool followsFingerOnLongPress(FFI ffi) {
-    if (!isMobile || !ffi.ffiModel.touchMode) return false;
+    if (!isMobile || !ffi.ffiModel.touchMode || LxOff.virtualMouse) {
+      return false;
+    }
     final a = LxPrefs.touchAction(LxPrefs.gestureLongPress);
     return a == LxPrefs.actionMove || a == LxPrefs.actionDrag;
   }
@@ -100,6 +121,7 @@ class LxTouch {
   /// Wischen mit 1 Finger verschiebt das Bild statt die Maus zu ziehen.
   static bool panMovesCanvas(FFI ffi) =>
       isMobile &&
+      !LxOff.virtualMouse &&
       ffi.ffiModel.touchMode &&
       !ffi.ffiModel.isPeerMobile &&
       LxPrefs.oneFingerPan == LxPrefs.panCanvas;
@@ -107,6 +129,7 @@ class LxTouch {
   /// Ränder links/rechts verschieben das Bild, die Mitte zieht/markiert.
   static bool edgePan(FFI ffi) =>
       isMobile &&
+      !LxOff.virtualMouse &&
       ffi.ffiModel.touchMode &&
       !ffi.ffiModel.isPeerMobile &&
       LxPrefs.oneFingerPan == LxPrefs.panEdges;
@@ -153,10 +176,14 @@ class LxTouch {
 
 /// Eigene Anpassung: Zoom und Verschieben auf das PC-Bild begrenzen.
 class LxView {
-  static bool get _on => isMobile && (LxPrefs.limitZoom || fixedMode);
+  static bool get _on =>
+      isMobile && !LxOff.virtualMouse && (LxPrefs.limitZoom || fixedMode);
 
   /// Fester Zoom: kein Zoomen, Start mittig, hoch/runter scrollt am PC.
-  static bool get fixedMode => isMobile && LxPrefs.viewMode == LxPrefs.viewFixed;
+  static bool get fixedMode =>
+      isMobile &&
+      !LxOff.virtualMouse &&
+      LxPrefs.viewMode == LxPrefs.viewFixed;
 
   // Ungefähre Höhe der Fusszeile, die unten über dem Bild liegt.
   static const _footer = 56.0;
