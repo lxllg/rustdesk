@@ -304,7 +304,8 @@ class _FloatingMouseState extends State<FloatingMouse> {
     final renderBox = context.findRenderObject() as RenderBox?;
     if (renderBox == null || !renderBox.attached) return;
 
-    final newRect = renderBox.localToGlobal(Offset.zero) & renderBox.size;
+    final newRect =
+        (renderBox.localToGlobal(Offset.zero) - _lxOrigin()) & renderBox.size;
 
     if (_lastBlockedRect != null) {
       _cursorModel.removeBlockedRect(_lastBlockedRect!);
@@ -313,11 +314,20 @@ class _FloatingMouseState extends State<FloatingMouse> {
     _lastBlockedRect = newRect;
   }
 
+  // Eigene Anpassung: Mit sichtbarer Status-/Navigationsleiste beginnt die
+  // Fernsteuerungsansicht nicht bei (0,0). Positionen werden relativ zur
+  // Ansicht gebraucht, sonst sitzt der echte Mauszeiger versetzt.
+  Offset _lxOrigin() {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached) return Offset.zero;
+    return box.localToGlobal(Offset.zero);
+  }
+
   Offset _getMouseGlobalPosition() {
     final RenderBox? renderBox =
         _cursorPaintKey.currentContext?.findRenderObject() as RenderBox?;
     if (renderBox != null) {
-      return renderBox.localToGlobal(Offset.zero);
+      return renderBox.localToGlobal(Offset.zero) - _lxOrigin();
     } else {
       return _position;
     }
