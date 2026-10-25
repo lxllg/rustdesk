@@ -112,6 +112,7 @@ class LxPrefs {
   static const barLock = 'lock';
   static const barPrivacy = 'privacy';
   static const barSettings = 'settings';
+  static const barConn = 'conn';
   static const barChat = 'chat';
   static const barMore = 'more';
 
@@ -124,6 +125,7 @@ class LxPrefs {
     barLock,
     barPrivacy,
     barSettings,
+    barConn,
     barChat,
     barMore,
   ];
@@ -136,6 +138,7 @@ class LxPrefs {
     barLock: 'Nach Sitzungsende sperren (Ein/Aus)',
     barPrivacy: 'PC-Bildschirm schwärzen (Ein/Aus)',
     barSettings: 'Eigene Anpassungen öffnen',
+    barConn: 'Verbindungsart anzeigen (direkt / Umleitung)',
     barChat: 'Chat / Sprachanruf',
     barMore: 'Weitere Aktionen',
   };
@@ -148,6 +151,7 @@ class LxPrefs {
     barLock: Icons.lock_outline,
     barPrivacy: Icons.desktop_access_disabled,
     barSettings: Icons.tune,
+    barConn: Icons.swap_horiz,
     barChat: Icons.message,
     barMore: Icons.more_vert,
   };
@@ -159,6 +163,7 @@ class LxPrefs {
     barLock: 'lx-bar-lock',
     barPrivacy: 'lx-bar-privacy',
     barSettings: 'lx-bar-settings',
+    barConn: 'lx-bar-conn',
   };
 
   static Set<String> get enabledBarItems {

@@ -749,6 +749,7 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
           icon: const Icon(Icons.tune),
           onPressed: _lxOpenSettings,
         ),
+      if (show(LxPrefs.barConn)) _lxConnButton(),
       if (!isWeb && show(LxPrefs.barChat))
         futureBuilder(
             future: gFFI.invokeMethod("get_value", "KEY_IS_SUPPORT_VOICE_CALL"),
@@ -926,6 +927,33 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
           ],
         ),
         onPressed: pending ? null : () => _lxSetPrivacy(!on),
+      );
+    });
+  }
+
+  /// Eigene Anpassung: zeigt, ob das Bild direkt oder über den
+  /// Umleitungs-Server (Relay) kommt.
+  Widget _lxConnButton() {
+    return Obx(() {
+      final type = ConnectionTypeState.find(widget.id);
+      final known = type.direct.value != kInvalidValueStr;
+      final direct = type.direct.value == ConnectionType.strDirect;
+      return IconButton(
+        color: Colors.white,
+        tooltip: 'Verbindungsart',
+        icon: Icon(
+          !known
+              ? Icons.more_horiz
+              : (direct ? Icons.swap_horiz : Icons.cloud_outlined),
+          color: !known
+              ? Colors.white54
+              : (direct ? Colors.greenAccent : Colors.orangeAccent),
+        ),
+        onPressed: () => showToast(!known
+            ? 'Verbindungsart noch unbekannt'
+            : (direct
+                ? 'Direkte Verbindung zum PC'
+                : 'Über Umleitungs-Server (Relay)')),
       );
     });
   }
