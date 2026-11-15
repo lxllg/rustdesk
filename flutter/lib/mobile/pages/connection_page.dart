@@ -84,7 +84,9 @@ class _ConnectionPageState extends State<ConnectionPage> {
       slivers: [
         SliverList(
             delegate: SliverChildListDelegate([
-          if (!bind.isCustomClient() && !isIOS)
+          // Eigene Anpassung: keine Update-Meldung – sie führt zur offiziellen
+          // App statt zu dieser angepassten Version.
+          if (false && !bind.isCustomClient() && !isIOS)
             Obx(() => _buildUpdateUI(stateGlobal.updateUrl.value)),
           _buildRemoteIDTextField(),
         ])),
