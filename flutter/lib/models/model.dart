@@ -976,7 +976,7 @@ class FfiModel with ChangeNotifier {
         dialogManager.dismissAll();
         dialogManager.showLoading(translate('Connecting...'),
             onCancel: closeConnection);
-        Timer(lxDelay, () {
+        LxConn.schedule(lxDelay, () {
           if (parent.target?.closed == true) return;
           reconnect(dialogManager, sessionId, false);
         });

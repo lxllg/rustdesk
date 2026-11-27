@@ -734,12 +734,25 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
                 onPressed: () =>
                     gFFI.dialogManager.toggleMobileActionsOverlay(ffi: gFFI),
               )
-            : IconButton(
-                color: Colors.white,
-                icon: Icon(
-                    gFFI.ffiModel.touchMode ? Icons.touch_app : Icons.mouse),
-                onPressed: () =>
+            // Eigene Anpassung: Tippen = virtuelle Maus im Touch-Modus ein/aus,
+            // lange drücken = bisheriges Menü (Maus-/Touch-Modus, Grösse).
+            : GestureDetector(
+                onLongPress: () =>
                     setState(() => _showGestureHelp = !_showGestureHelp),
+                child: IconButton(
+                  color: Colors.white,
+                  icon: Icon(
+                    gFFI.ffiModel.virtualMouseMode.showVirtualMouse
+                        ? Icons.mouse
+                        : (gFFI.ffiModel.touchMode
+                            ? Icons.touch_app
+                            : Icons.mouse_outlined),
+                    color: gFFI.ffiModel.virtualMouseMode.showVirtualMouse
+                        ? Colors.lightBlueAccent
+                        : null,
+                  ),
+                  onPressed: _lxToggleVirtualMouse,
+                ),
               ),
       if (canInput && !gFFI.ffiModel.isPeerAndroid && show(LxPrefs.barLock))
         _lxLockButton(),
@@ -932,6 +945,16 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
         onPressed: pending ? null : () => _lxSetPrivacy(!on),
       );
     });
+  }
+
+  Future<void> _lxToggleVirtualMouse() async {
+    final mouse = gFFI.ffiModel.virtualMouseMode;
+    if (!mouse.showVirtualMouse && !gFFI.ffiModel.touchMode) {
+      gFFI.ffiModel.toggleTouchMode();
+      bind.mainSetLocalOption(key: kOptionTouchMode, value: 'Y');
+    }
+    await mouse.toggleVirtualMouse();
+    if (mounted) setState(() => _showGestureHelp = false);
   }
 
   /// Eigene Anpassung: zeigt, ob das Bild direkt oder über den

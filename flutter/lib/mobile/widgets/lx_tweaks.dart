@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:flutter/widgets.dart'
+    show AppLifecycleListener, WidgetsBinding;
 import 'package:get/get.dart';
 
 import '../../common.dart';
@@ -296,14 +298,40 @@ class LxConn {
   /// Neue Verbindung oder erfolgreich verbunden: Zähler zurücksetzen.
   static void reset() => _tries = 0;
 
+  static bool get _background {
+    final state = WidgetsBinding.instance.lifecycleState;
+    return state != null && state != AppLifecycleState.resumed;
+  }
+
   /// Liefert die Wartezeit bis zum nächsten Versuch, oder null = Meldung zeigen.
   static Duration? retryDelay(String? type, String? title, String? text) {
     if (!isMobile || !LxPrefs.autoRetry) return null;
     if (title != 'Connection Error' || text == null) return null;
+    // App im Hintergrund: Android lässt dort oft kein Netz zu. Keine Meldung,
+    // sondern beim Zurückkehren in die App sofort neu verbinden.
+    if (isAndroid && _background) return Duration.zero;
     if (!_transient.any((t) => text.contains(t))) return null;
     if (_tries >= maxTries) return null;
     _tries++;
     return Duration(milliseconds: 1000 + 700 * _tries);
+  }
+
+  static AppLifecycleListener? _resumeListener;
+
+  /// Startet den nächsten Versuch nach [delay]; ist die App im Hintergrund,
+  /// erst wenn sie wieder im Vordergrund ist.
+  static void schedule(Duration delay, void Function() run) {
+    if (!(isAndroid && _background)) {
+      Timer(delay, run);
+      return;
+    }
+    _resumeListener?.dispose();
+    _resumeListener = AppLifecycleListener(onResume: () {
+      _resumeListener?.dispose();
+      _resumeListener = null;
+      _tries = 0;
+      Timer(const Duration(milliseconds: 300), run);
+    });
   }
 }
 
